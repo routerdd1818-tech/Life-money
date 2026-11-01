@@ -872,6 +872,7 @@ interface VaultContextValue {
   // Actions - Screener, Watchlist & Trade Plans (同業估值與動態交易計畫)
   upsertWatchlistItem: (item: WatchlistStockItem) => void;
   deleteWatchlistItem: (id: string) => void;
+  upsertScreenerStock: (stock: ScreenerStockItem) => void;
   upsertTradePlan: (plan: UserTradePlan) => void;
   deleteTradePlan: (id: string) => void;
   updateTradePlanStage: (id: string, stage: TradePlanStage) => void;
@@ -1897,6 +1898,20 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setWatchlist((prev) => prev.filter((w) => w.id !== id));
   };
 
+  const upsertScreenerStock = (stock: ScreenerStockItem) => {
+    setScreenerStocks((prev) => {
+      const idx = prev.findIndex(
+        (s) => s.symbol.toUpperCase() === stock.symbol.toUpperCase()
+      );
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...stock };
+        return next;
+      }
+      return [stock, ...prev];
+    });
+  };
+
   const upsertTradePlan = (plan: UserTradePlan) => {
     setTradePlans((prev) => {
       const exists = prev.some(
@@ -2241,6 +2256,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         signOut,
         upsertWatchlistItem,
         deleteWatchlistItem,
+        upsertScreenerStock,
         upsertTradePlan,
         deleteTradePlan,
         updateTradePlanStage,

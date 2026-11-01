@@ -42,6 +42,11 @@ import {
   UserTradePlan,
 } from '../types';
 import { formatDataTimestamp } from '../utils/formatters';
+import {
+  searchTaiwanStockUniverse,
+  resolveStockToScreenerItem,
+  TaiwanStockBasicInfo,
+} from '../services/stockUniverseService';
 
 interface PeerValuationDashboardProps {
   selectedSymbol: string;
@@ -58,6 +63,7 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
     screenerStocks,
     watchlist,
     upsertWatchlistItem,
+    upsertScreenerStock,
     tradePlans,
     upsertTradePlan,
     deleteTradePlan,
@@ -91,21 +97,102 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
 
   // 4. 標的搜尋與過濾狀態
   const [targetSearchQuery, setTargetSearchQuery] = useState('');
+  const [isResolvingTarget, setIsResolvingTarget] = useState(false);
 
-  // 搜尋過濾後的候選標的
+  // 搜尋過濾後的候選標的 (包含在庫存標的與全台股 3,500+ 檔標的)
   const filteredCandidates = useMemo(() => {
     const q = targetSearchQuery.trim().toLowerCase();
-    if (!q) return screenerStocks;
-    return screenerStocks.filter((s) => {
-      return (
+    if (!q) {
+      return screenerStocks.map((s) => ({
+        symbol: s.symbol,
+        name: s.name,
+        sectorName: s.sectorName,
+        isPreset: true,
+        stockItem: s,
+      }));
+    }
+
+    const list: Array<{
+      symbol: string;
+      name: string;
+      sectorName: string;
+      isPreset: boolean;
+      stockItem?: ScreenerStockItem;
+      basicInfo?: TaiwanStockBasicInfo;
+    }> = [];
+    const seen = new Set<string>();
+
+    // 1. 在庫股票
+    for (const s of screenerStocks) {
+      if (
         s.symbol.toLowerCase().includes(q) ||
         s.symbol.replace(/\.(TW|TWO)$/i, '').toLowerCase().includes(q) ||
         s.name.toLowerCase().includes(q) ||
         s.sectorName.toLowerCase().includes(q) ||
         (s.subTheme || '').toLowerCase().includes(q)
-      );
-    });
+      ) {
+        seen.add(s.symbol.toUpperCase());
+        seen.add(s.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase());
+        list.push({
+          symbol: s.symbol,
+          name: s.name,
+          sectorName: s.sectorName,
+          isPreset: true,
+          stockItem: s,
+        });
+      }
+    }
+
+    // 2. 全台股字典 (如 4526 東台)
+    const universe = searchTaiwanStockUniverse(q, 15);
+    for (const u of universe) {
+      if (!seen.has(u.symbol.toUpperCase()) && !seen.has(u.id.toUpperCase())) {
+        seen.add(u.symbol.toUpperCase());
+        seen.add(u.id.toUpperCase());
+        list.push({
+          symbol: u.symbol,
+          name: u.name,
+          sectorName: u.sector,
+          isPreset: false,
+          basicInfo: u,
+        });
+      }
+    }
+
+    return list;
   }, [screenerStocks, targetSearchQuery]);
+
+  // 切換選中標的 (若尚未在庫則自動從 FinMind 解析載入)
+  const handleSelectCandidate = async (candidate: {
+    symbol: string;
+    name: string;
+    isPreset: boolean;
+    stockItem?: ScreenerStockItem;
+    basicInfo?: TaiwanStockBasicInfo;
+  }) => {
+    if (candidate.isPreset && candidate.stockItem) {
+      onSelectSymbol(candidate.symbol);
+      if (targetSearchQuery) setTargetSearchQuery('');
+      return;
+    }
+
+    if (candidate.basicInfo) {
+      setIsResolvingTarget(true);
+      try {
+        const resolved = await resolveStockToScreenerItem(
+          candidate.basicInfo,
+          settings.finMindToken
+        );
+        upsertScreenerStock(resolved);
+        onSelectSymbol(resolved.symbol);
+      } catch {
+        onSelectSymbol(candidate.symbol);
+      } finally {
+        setIsResolvingTarget(false);
+        if (targetSearchQuery) setTargetSearchQuery('');
+      }
+    }
+  };
 
   // 目標股票
   const targetStock = useMemo(() => {
@@ -330,23 +417,26 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-            {filteredCandidates.slice(0, 16).map((s) => {
+            {filteredCandidates.slice(0, 18).map((s) => {
               const isSelected = s.symbol.toUpperCase() === targetStock.symbol.toUpperCase();
               return (
                 <button
                   key={s.symbol}
                   type="button"
-                  onClick={() => {
-                    onSelectSymbol(s.symbol);
-                    if (targetSearchQuery) setTargetSearchQuery('');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all border ${
+                  disabled={isResolvingTarget}
+                  onClick={() => void handleSelectCandidate(s)}
+                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
                     isSelected
                       ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-sm'
                       : 'bg-[#F6F7F9] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#CBD5E1]'
-                  }`}
+                  } ${isResolvingTarget ? 'opacity-50' : ''}`}
                 >
-                  {s.name} ({s.symbol.replace('.TW', '')})
+                  <span>{s.name} ({s.symbol.replace(/\.(TW|TWO)$/i, '')})</span>
+                  {!s.isPreset && (
+                    <span className="px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-[9px] font-semibold">
+                      台股
+                    </span>
+                  )}
                 </button>
               );
             })}

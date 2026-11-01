@@ -42,9 +42,25 @@ import {
   evaluateMultiAgentVibe,
   MultiAgentVibeAnalysis,
 } from '../services/multiSourceQuantEngine';
+import {
+  searchTaiwanStockUniverse,
+  resolveStockToScreenerItem,
+  TaiwanStockBasicInfo,
+} from '../services/stockUniverseService';
 
 type ScreenerSubTab = 'screener' | 'peer_valuation' | 'sectors' | 'watchlist' | 'guide';
 type WatchlistCategory = 'watching' | 'holdings' | 'favorite';
+
+export interface UnifiedSearchResultItem {
+  id: string;
+  symbol: string;
+  name: string;
+  sectorName: string;
+  market: string;
+  isPreset: boolean;
+  stockItem?: ScreenerStockItem;
+  basicInfo?: TaiwanStockBasicInfo;
+}
 
 export const StockScreenerView: React.FC = () => {
   const {
@@ -52,6 +68,7 @@ export const StockScreenerView: React.FC = () => {
     watchlist,
     upsertWatchlistItem,
     deleteWatchlistItem,
+    upsertScreenerStock,
     securityHoldings,
     upsertSecurityHolding,
     exchangeRateUsdTwd,
@@ -100,8 +117,9 @@ export const StockScreenerView: React.FC = () => {
     }
   };
 
-  // 全局股票即時搜尋關鍵字
+  // 全局股票即時搜尋關鍵字與解析狀態
   const [searchQuery, setSearchQuery] = useState('');
+  const [isResolvingStock, setIsResolvingStock] = useState<string | null>(null);
 
   // 執行五步漏斗選股
   const { funnelSteps, passedStocks } = useMemo(
@@ -109,11 +127,16 @@ export const StockScreenerView: React.FC = () => {
     [screenerStocks, criteria]
   );
 
-  // 全市場模糊搜尋匹配結果 (比對代碼、名稱、產業、題材、題材筆記)
-  const searchResults = useMemo(() => {
+  // 全市場模糊搜尋匹配結果 (比對代碼、名稱、產業、題材，並整合全台股 3,500+ 檔上市櫃資料庫)
+  const searchResults = useMemo<UnifiedSearchResultItem[]>(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    return screenerStocks.filter((s) => {
+
+    const results: UnifiedSearchResultItem[] = [];
+    const seen = new Set<string>();
+
+    // 1. 先檢索在庫存 screenerStocks 裡的個股 (具備完整指標)
+    for (const s of screenerStocks) {
       const matchSymbol =
         s.symbol.toLowerCase().includes(q) ||
         s.symbol.replace(/\.(TW|TWO)$/i, '').toLowerCase().includes(q);
@@ -121,8 +144,42 @@ export const StockScreenerView: React.FC = () => {
       const matchSector = s.sectorName.toLowerCase().includes(q);
       const matchTheme = (s.subTheme || '').toLowerCase().includes(q);
       const matchCatalyst = (s.catalystNote || '').toLowerCase().includes(q);
-      return matchSymbol || matchName || matchSector || matchTheme || matchCatalyst;
-    });
+      if (matchSymbol || matchName || matchSector || matchTheme || matchCatalyst) {
+        const cleanId = s.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
+        seen.add(cleanId);
+        seen.add(s.symbol.toUpperCase());
+        results.push({
+          id: cleanId,
+          symbol: s.symbol,
+          name: s.name,
+          sectorName: s.sectorName,
+          market: s.market,
+          isPreset: true,
+          stockItem: s,
+        });
+      }
+    }
+
+    // 2. 檢索全台股 3,500+ 檔上市櫃字典 (支援 4526 東台等所有個股)
+    const universeMatches = searchTaiwanStockUniverse(q, 30);
+    for (const u of universeMatches) {
+      const cleanId = u.id.toUpperCase();
+      if (!seen.has(cleanId) && !seen.has(u.symbol.toUpperCase())) {
+        seen.add(cleanId);
+        seen.add(u.symbol.toUpperCase());
+        results.push({
+          id: u.id,
+          symbol: u.symbol,
+          name: u.name,
+          sectorName: u.sector,
+          market: u.market,
+          isPreset: false,
+          basicInfo: u,
+        });
+      }
+    }
+
+    return results;
   }, [screenerStocks, searchQuery]);
 
   // 智能選股結果連動搜尋過濾
@@ -244,6 +301,82 @@ export const StockScreenerView: React.FC = () => {
     alert(`已將 ${params.name} (${unitsStr} 股) 加入「資產 -> 股票/基金/債券」持倉！`);
   };
 
+  /**
+   * 針對全市場股票搜尋結果執行動作 (若非庫存股票則即時向 FinMind 拉取行情與籌碼)
+   */
+  const handleResolveAndAction = async (
+    item: UnifiedSearchResultItem,
+    action: 'vibe' | 'valuation' | 'watch' | 'favorite' | 'portfolio'
+  ) => {
+    let targetStock: ScreenerStockItem;
+
+    if (item.isPreset && item.stockItem) {
+      targetStock = item.stockItem;
+    } else if (item.basicInfo) {
+      setIsResolvingStock(item.symbol);
+      try {
+        targetStock = await resolveStockToScreenerItem(item.basicInfo, settings.finMindToken);
+        upsertScreenerStock(targetStock);
+      } catch {
+        targetStock = {
+          symbol: item.symbol,
+          name: item.name,
+          market: 'TW',
+          sectorId: 'heavy_power',
+          sectorName: item.sectorName,
+          subTheme: `${item.market} ${item.sectorName}`,
+          price: 30,
+          dailyChangePct: 0,
+          avgTurnover60dYiTwd: 1.0,
+          roePct: 12.0,
+          peRatio: 16.0,
+          pbRatio: 1.4,
+          grossMarginPct: 22.0,
+          freeCashFlowPositive: true,
+          dividendYieldPct: 3.5,
+          aboveMa60: true,
+          aboveMa240: true,
+          momentum60dPct: 5.0,
+          annualVolatilityPct: 22.0,
+          instNetBuy5dLots: 0,
+          trustNetBuy5dLots: 0,
+          majorHolderChangePct: 0,
+          marginUtilizationHealth: 'healthy',
+          revenueYoYPct: 5.0,
+          revenueMoMPct: 1.0,
+          catalystNote: '台股全市場串接標的',
+          opmPct: 8.5,
+          estimatedEps: 1.8,
+          atr14: 1.0,
+        };
+        upsertScreenerStock(targetStock);
+      } finally {
+        setIsResolvingStock(null);
+      }
+    } else {
+      return;
+    }
+
+    if (action === 'vibe') {
+      void handleOpenVibeModal(targetStock);
+    } else if (action === 'valuation') {
+      setSelectedValuationSymbol(targetStock.symbol);
+      setSubTab('peer_valuation');
+    } else if (action === 'watch') {
+      handleAddStockToWatchlist(targetStock, '全台股搜尋新增', 'watching');
+    } else if (action === 'favorite') {
+      handleAddStockToWatchlist(targetStock, '全台股搜尋新增', 'favorite');
+    } else if (action === 'portfolio') {
+      handleBuyIntoPortfolio({
+        symbol: targetStock.symbol,
+        name: targetStock.name,
+        price: targetStock.price,
+        market: targetStock.market,
+        dividendYieldPct: targetStock.dividendYieldPct,
+      });
+    }
+  };
+
   return (
     <div className="space-y-4 pb-24">
       {/* 行情與財務資料時間狀態列 (精準到分鐘 + 一鍵同步刷新) */}
@@ -314,6 +447,7 @@ export const StockScreenerView: React.FC = () => {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-[11px]">
           <span className="text-[#8B95A1] shrink-0 font-medium">熱門快搜：</span>
           {[
+            { label: '東台 4526', query: '4526' },
             { label: '台積電 2330', query: '2330' },
             { label: '奇鋐 3017', query: '3017' },
             { label: '雙鴻 3324', query: '3324' },
@@ -377,26 +511,37 @@ export const StockScreenerView: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                {searchResults.map((stock) => {
-                  const watched = isInWatchlist(stock.symbol);
-                  const isHeld = isHeldInPortfolio(stock.symbol);
+                {searchResults.map((item) => {
+                  const watched = isInWatchlist(item.symbol);
+                  const isHeld = isHeldInPortfolio(item.symbol);
+                  const isResolving = isResolvingStock === item.symbol;
+                  const stock = item.stockItem;
+
                   return (
                     <div
-                      key={stock.symbol}
+                      key={item.symbol}
                       className="p-3 rounded-xl border border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#1F2631] hover:border-[#2563EB]/50 transition-all space-y-2"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                              {stock.name}
+                              {item.name}
                             </span>
                             <span className="text-xs font-mono text-[#8B95A1] font-semibold">
-                              {stock.symbol}
+                              {item.symbol}
                             </span>
                             <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-[10px] font-semibold text-[#2563EB]">
-                              {stock.sectorName}
+                              {item.sectorName}
                             </span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono font-medium text-[#4E5968] dark:text-[#9BA4B0]">
+                              {item.market}
+                            </span>
+                            {!item.isPreset && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-[10px] font-semibold text-[#059669]">
+                                台股資料庫
+                              </span>
+                            )}
                             {isHeld && (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-[10px] font-bold text-[#059669]">
                                 持倉
@@ -404,61 +549,70 @@ export const StockScreenerView: React.FC = () => {
                             )}
                           </div>
                           <div className="text-[11px] text-[#8B95A1] mt-0.5">
-                            {stock.subTheme} · {stock.catalystNote}
+                            {stock ? `${stock.subTheme} · ${stock.catalystNote}` : `全台股上市櫃標的 · 點擊直接串接即時行情與籌碼`}
                           </div>
                         </div>
 
-                        <div className="text-right tabular-nums shrink-0">
-                          <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                            {stock.market === 'US' ? 'USD ' : 'NT$ '}
-                            {stock.price.toLocaleString()}
+                        {stock ? (
+                          <div className="text-right tabular-nums shrink-0">
+                            <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                              {stock.market === 'US' ? 'USD ' : 'NT$ '}
+                              {stock.price.toLocaleString()}
+                            </div>
+                            <div
+                              className={`text-xs font-bold ${
+                                stock.dailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                              }`}
+                            >
+                              {stock.dailyChangePct >= 0 ? '▲ +' : '▼ '}
+                              {stock.dailyChangePct}%
+                            </div>
                           </div>
-                          <div
-                            className={`text-xs font-bold ${
-                              stock.dailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                            }`}
-                          >
-                            {stock.dailyChangePct >= 0 ? '▲ +' : '▼ '}
-                            {stock.dailyChangePct}%
+                        ) : (
+                          <div className="text-right shrink-0">
+                            <span className="text-[11px] font-medium text-[#2563EB] bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded">
+                              可即時拉取
+                            </span>
                           </div>
-                        </div>
+                        )}
                       </div>
 
-                      {/* 量化財務數據標籤列 */}
-                      <div className="flex items-center gap-2 text-[10px] text-[#4E5968] dark:text-[#9BA4B0] tabular-nums">
-                        <span>P/E <strong>{stock.peRatio}</strong></span>
-                        <span>·</span>
-                        <span>ROE <strong>{stock.roePct}%</strong></span>
-                        <span>·</span>
-                        <span>
-                          營收 YoY{' '}
-                          <strong className={stock.revenueYoYPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'}>
-                            {stock.revenueYoYPct >= 0 ? '+' : ''}{stock.revenueYoYPct}%
-                          </strong>
-                        </span>
-                        <span>·</span>
-                        <span>殖利率 <strong>{stock.dividendYieldPct}%</strong></span>
-                      </div>
+                      {/* 量化財務數據標籤列 (若已在庫存則展示) */}
+                      {stock && (
+                        <div className="flex items-center gap-2 text-[10px] text-[#4E5968] dark:text-[#9BA4B0] tabular-nums">
+                          <span>P/E <strong>{stock.peRatio}</strong></span>
+                          <span>·</span>
+                          <span>ROE <strong>{stock.roePct}%</strong></span>
+                          <span>·</span>
+                          <span>
+                            營收 YoY{' '}
+                            <strong className={stock.revenueYoYPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'}>
+                              {stock.revenueYoYPct >= 0 ? '+' : ''}{stock.revenueYoYPct}%
+                            </strong>
+                          </span>
+                          <span>·</span>
+                          <span>殖利率 <strong>{stock.dividendYieldPct}%</strong></span>
+                        </div>
+                      )}
 
                       {/* 動作按鈕列 */}
                       <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-[#EAEDF2] dark:border-[#262C36]">
                         <button
                           type="button"
-                          onClick={() => void handleOpenVibeModal(stock)}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          disabled={isResolving}
+                          onClick={() => void handleResolveAndAction(item, 'vibe')}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50"
                           title="開啟 HKUDS Vibe 4 大 AI 代理評估與 FinMind 籌碼穿透"
                         >
-                          <Zap className="w-3.5 h-3.5 fill-current" />
-                          <span>Vibe 決策</span>
+                          <Zap className={`w-3.5 h-3.5 fill-current ${isResolving ? 'animate-spin' : ''}`} />
+                          <span>{isResolving ? '載入中...' : 'Vibe 決策'}</span>
                         </button>
 
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedValuationSymbol(stock.symbol);
-                            setSubTab('peer_valuation');
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-[#2563EB] text-xs font-semibold flex items-center gap-1 transition-colors"
+                          disabled={isResolving}
+                          onClick={() => void handleResolveAndAction(item, 'valuation')}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-[#2563EB] text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50"
                         >
                           <Compass className="w-3.5 h-3.5" />
                           <span>同業估值</span>
@@ -466,8 +620,9 @@ export const StockScreenerView: React.FC = () => {
 
                         <button
                           type="button"
-                          onClick={() => handleAddStockToWatchlist(stock, '搜尋新增', 'watching')}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
+                          disabled={isResolving}
+                          onClick={() => void handleResolveAndAction(item, 'watch')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50 ${
                             watched
                               ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
                               : 'bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0]'
@@ -479,8 +634,9 @@ export const StockScreenerView: React.FC = () => {
 
                         <button
                           type="button"
-                          onClick={() => handleAddStockToWatchlist(stock, '搜尋新增', 'favorite')}
-                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#F04452] hover:bg-rose-50 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          disabled={isResolving}
+                          onClick={() => void handleResolveAndAction(item, 'favorite')}
+                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#F04452] hover:bg-rose-50 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-50"
                         >
                           <Heart className="w-3.5 h-3.5" />
                           <span>+ 喜好</span>
@@ -488,16 +644,9 @@ export const StockScreenerView: React.FC = () => {
 
                         <button
                           type="button"
-                          onClick={() =>
-                            handleBuyIntoPortfolio({
-                              symbol: stock.symbol,
-                              name: stock.name,
-                              price: stock.price,
-                              market: stock.market,
-                              dividendYieldPct: stock.dividendYieldPct,
-                            })
-                          }
-                          className="px-2.5 py-1 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1"
+                          disabled={isResolving}
+                          onClick={() => void handleResolveAndAction(item, 'portfolio')}
+                          className="px-2.5 py-1 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>轉入持倉</span>

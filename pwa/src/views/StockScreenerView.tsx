@@ -14,6 +14,7 @@ import {
   Eye,
   Flame,
   Layers,
+  Network,
   Plus,
   RefreshCw,
   Search,
@@ -57,9 +58,10 @@ import {
   SubCategoryMeta,
 } from '../services/industryUniverseService';
 import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
+import { IndustryMapView } from '../components/IndustryMapView';
 
 type MainTab = 'watchlist' | 'rankings' | 'industries' | 'strategies';
-type ModalViewMode = 'kline' | 'ai_fundamental';
+type ModalViewMode = 'kline' | 'ai_fundamental' | 'industry_map';
 
 interface UnifiedSearchItem {
   id: string;
@@ -608,11 +610,11 @@ export const StockScreenerView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 分頁 2: 漲跌榜與買賣超榜 (行情排行折頁) */}
+      {/* 分頁 2: 漲跌榜與買賣超榜 (主流財經 App 行情排行折頁) */}
       {/* ========================================================================= */}
       {activeTab === 'rankings' && (
-        <section className="space-y-2.5">
-          {/* 次級分類膠囊切換 (漲幅榜 / 跌幅榜 / 法人買超 / 法人賣超 / 成交金額) */}
+        <section className="space-y-2">
+          {/* 主流財經 App 次級分類膠囊切換 (漲幅榜 / 跌幅榜 / 法人買超 / 法人賣超 / 成交金額) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
             {MARKET_RANKING_CATEGORIES.map((cat) => {
               const isActive = activeRankingType === cat.id;
@@ -621,7 +623,7 @@ export const StockScreenerView: React.FC = () => {
                   key={cat.id}
                   type="button"
                   onClick={() => setActiveRankingType(cat.id)}
-                  className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 ${
                     isActive
                       ? 'bg-[#191F28] text-white dark:bg-white dark:text-[#191F28] border-transparent font-bold shadow-xs'
                       : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
@@ -631,34 +633,55 @@ export const StockScreenerView: React.FC = () => {
                   {cat.id === 'losers' && <TrendingDown className="w-3.5 h-3.5 text-emerald-500" />}
                   {cat.id === 'inst_buy' && <ArrowUpRight className="w-3.5 h-3.5 text-blue-500" />}
                   {cat.id === 'inst_sell' && <ArrowDownRight className="w-3.5 h-3.5 text-amber-500" />}
-                  {cat.id === 'turnover' && <Activity className="w-3.5 h-3.5 text-indigo-500" />}
+                  {cat.id === 'turnover' && <Flame className="w-3.5 h-3.5 text-indigo-500" />}
                   <span>{cat.title}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* 榜單摘要說明卡 */}
+          {/* 榜單摘要說明卡 (標註台股 100% 聚焦與排序標準) */}
           {(() => {
             const currentCat = MARKET_RANKING_CATEGORIES.find((c) => c.id === activeRankingType);
             const rankingList = marketRankings[activeRankingType] || [];
 
             return (
-              <>
-                <div className="px-3 py-2 rounded-xl bg-[#F6F7F9] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between text-xs">
-                  <div className="text-[#4E5968] dark:text-[#9BA4B0]">
-                    {currentCat?.description}
+              <div className="space-y-2">
+                <div className="px-3.5 py-2 rounded-xl bg-[#F6F7F9] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 text-[#4E5968] dark:text-[#9BA4B0]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span>台股 {currentCat?.description}</span>
                   </div>
                   <span className="text-[10px] font-mono text-[#8B95A1] shrink-0 ml-2">
-                    前 {rankingList.length} 檔
+                    前 {rankingList.length} 檔標的
                   </span>
                 </div>
 
+                {/* 主流財經 App 表頭 (TableHeader) */}
+                <div className="px-3.5 py-1.5 flex items-center justify-between text-[11px] font-bold text-[#8B95A1] border-b border-[#EAEDF2] dark:border-[#262C36]">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-center">序號</span>
+                    <span>標的名稱 / 產業</span>
+                  </div>
+                  <div className="flex items-center gap-4 sm:gap-6">
+                    <span className="w-16 sm:w-20 text-right">成交價</span>
+                    <span className="w-20 sm:w-24 text-right">
+                      {activeRankingType === 'gainers' || activeRankingType === 'losers'
+                        ? '漲跌幅'
+                        : activeRankingType === 'inst_buy'
+                          ? '5日法人買超'
+                          : activeRankingType === 'inst_sell'
+                            ? '5日法人賣超'
+                            : '日均成交額'}
+                    </span>
+                  </div>
+                </div>
+
                 {/* 排行列表 */}
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   {rankingList.length === 0 ? (
                     <div className="toss-card p-6 text-center text-xs text-[#8B95A1]">
-                      目前無符合此排行之標的
+                      目前無符合此排行之台股標的
                     </div>
                   ) : (
                     rankingList.map((stock, idx) => {
@@ -671,15 +694,15 @@ export const StockScreenerView: React.FC = () => {
                           className="toss-card px-3.5 py-2.5 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
                         >
                           <div className="flex items-center gap-3">
-                            {/* 排行序號 */}
+                            {/* 排行序號 (前三名高對比微徽章) */}
                             <div
                               className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black tabular-nums shrink-0 ${
                                 rank === 1
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-200'
                                   : rank === 2
                                     ? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
                                     : rank === 3
-                                      ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200'
+                                      ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/70 dark:text-orange-200'
                                       : 'bg-[#F0F2F6] text-[#8B95A1] dark:bg-[#1F2631]'
                               }`}
                             >
@@ -694,26 +717,31 @@ export const StockScreenerView: React.FC = () => {
                                 <span className="text-xs font-mono font-medium text-[#8B95A1]">
                                   {stock.symbol.replace(/\.(TW|TWO)$/i, '')}
                                 </span>
-                                <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[9px] text-[#8B95A1]">
                                   {stock.sectorName}
                                 </span>
-                              </div>
-                              <div className="text-[10px] text-[#8B95A1]">
-                                {stock.subTheme || `ROE ${stock.roePct}% · PE ${stock.peRatio}x`}
+                                <span className="text-[10px] text-[#8B95A1] line-clamp-1 max-w-[120px] sm:max-w-[180px]">
+                                  {stock.subTheme || `ROE ${stock.roePct}%`}
+                                </span>
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2.5">
-                            <div className="text-right tabular-nums">
-                              <div className="text-sm font-bold text-[#191F28] dark:text-white">
-                                NT$ {stock.price.toLocaleString()}
-                              </div>
+                          <div className="flex items-center gap-4 sm:gap-6">
+                            {/* 成交價 (大字 tabular-nums) */}
+                            <div className="w-16 sm:w-20 text-right tabular-nums">
+                              <span className="text-sm font-bold text-[#191F28] dark:text-white">
+                                {stock.price.toLocaleString()}
+                              </span>
+                            </div>
 
-                              {/* 依榜單類型顯示核心指標 */}
+                            {/* 依榜單類型顯示之指標膠囊 (固定寬度右對齊) */}
+                            <div className="w-20 sm:w-24 text-right tabular-nums">
                               {activeRankingType === 'gainers' || activeRankingType === 'losers' ? (
                                 <div
-                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md inline-block ${
+                                  className={`text-[11px] font-bold px-2 py-0.5 rounded-md inline-block w-full text-center ${
                                     stock.dailyChangePct >= 0
                                       ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
                                       : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
@@ -723,27 +751,26 @@ export const StockScreenerView: React.FC = () => {
                                   {stock.dailyChangePct}%
                                 </div>
                               ) : activeRankingType === 'inst_buy' ? (
-                                <div className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-blue-50 text-[#2563EB] dark:bg-blue-950/40 dark:text-blue-300 inline-block">
-                                  買超 +{stock.instNetBuy5dLots.toLocaleString()}張
+                                <div className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-blue-50 text-[#2563EB] dark:bg-blue-950/40 dark:text-blue-300 inline-block w-full text-center">
+                                  +{stock.instNetBuy5dLots.toLocaleString()}張
                                 </div>
                               ) : activeRankingType === 'inst_sell' ? (
-                                <div className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-[#059669] dark:bg-emerald-950/40 dark:text-emerald-300 inline-block">
-                                  賣超 {stock.instNetBuy5dLots.toLocaleString()}張
+                                <div className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-[#059669] dark:bg-emerald-950/40 dark:text-emerald-300 inline-block w-full text-center">
+                                  {stock.instNetBuy5dLots.toLocaleString()}張
                                 </div>
                               ) : (
-                                <div className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-gray-100 text-[#4E5968] dark:bg-gray-800 dark:text-[#9BA4B0] inline-block">
-                                  日均 {stock.avgTurnover60dYiTwd} 億
+                                <div className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gray-100 text-[#4E5968] dark:bg-gray-800 dark:text-[#9BA4B0] inline-block w-full text-center">
+                                  {stock.avgTurnover60dYiTwd} 億
                                 </div>
                               )}
                             </div>
-                            <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB]" />
                           </div>
                         </div>
                       );
                     })
                   )}
                 </div>
-              </>
+              </div>
             );
           })()}
         </section>
@@ -1098,7 +1125,7 @@ export const StockScreenerView: React.FC = () => {
               </button>
             </div>
 
-            {/* 雙切換分頁標籤 (K 線走勢 vs AI 深度決策) */}
+            {/* 三切換分頁標籤 (K 線走勢 vs AI 深度決策 vs 產業地圖與供應鏈) */}
             <div className="flex border-b border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#161B22] text-xs font-bold px-2 pt-1 gap-1">
               <button
                 type="button"
@@ -1106,11 +1133,11 @@ export const StockScreenerView: React.FC = () => {
                 className={`flex-1 py-2 rounded-t-lg transition-all flex items-center justify-center gap-1.5 ${
                   modalMode === 'kline'
                     ? 'bg-white dark:bg-[#0E1116] text-[#2563EB] border-t-2 border-[#2563EB] shadow-2xs'
-                    : 'text-[#8B95A1]'
+                    : 'text-[#8B95A1] hover:text-[#4E5968]'
                 }`}
               >
                 <CandlestickIcon className="w-3.5 h-3.5" />
-                <span>日 K 線走勢與點位</span>
+                <span>日 K 線走勢</span>
               </button>
 
               <button
@@ -1119,11 +1146,24 @@ export const StockScreenerView: React.FC = () => {
                 className={`flex-1 py-2 rounded-t-lg transition-all flex items-center justify-center gap-1.5 ${
                   modalMode === 'ai_fundamental'
                     ? 'bg-white dark:bg-[#0E1116] text-[#2563EB] border-t-2 border-[#2563EB] shadow-2xs'
-                    : 'text-[#8B95A1]'
+                    : 'text-[#8B95A1] hover:text-[#4E5968]'
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>AI 決策與基本面</span>
+                <span>AI 深度決策</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setModalMode('industry_map')}
+                className={`flex-1 py-2 rounded-t-lg transition-all flex items-center justify-center gap-1.5 ${
+                  modalMode === 'industry_map'
+                    ? 'bg-white dark:bg-[#0E1116] text-[#2563EB] border-t-2 border-[#2563EB] shadow-2xs'
+                    : 'text-[#8B95A1] hover:text-[#4E5968]'
+                }`}
+              >
+                <Network className="w-3.5 h-3.5" />
+                <span>產業地圖與估值</span>
               </button>
             </div>
 
@@ -1205,6 +1245,19 @@ export const StockScreenerView: React.FC = () => {
               {/* 模式 2: AI 決策與基本面深度診斷 */}
               {modalMode === 'ai_fundamental' && (
                 <AIAnalysisReportView stock={detailStock} allStocks={screenerStocks} />
+              )}
+
+              {/* 模式 3: 企業產業地圖、上下游供應鏈與產業環節估值剖析 */}
+              {modalMode === 'industry_map' && (
+                <IndustryMapView
+                  stock={detailStock}
+                  onSelectStock={(sym) => {
+                    void handleOpenStock({
+                      symbol: sym,
+                      id: sym.replace(/\.(TW|TWO)$/i, ''),
+                    } as any);
+                  }}
+                />
               )}
             </div>
 

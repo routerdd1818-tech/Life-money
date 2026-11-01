@@ -421,6 +421,11 @@ export interface ScreenerStockItem {
   revenueYoYPct: number;           // 最新月營收年增率 YoY %
   revenueMoMPct: number;           // 最新月營收月增率 MoM %
   catalystNote: string;            // 法說展望與產業利基摘要
+  opmPct?: number;                 // 營業利益率 OPM %
+  estimatedEps?: number;           // 預估 EPS (元)
+  atr14?: number;                  // 14日真實波動幅度 (元)
+  isCyclical?: boolean;            // 景氣循環股標記 (如航運、記憶體、面板)
+  peerTags?: string[];             // 所屬同業與供應鏈概念標籤 (如 'CoWoS先進封裝', '水冷散熱模組')
 }
 
 export interface ScreenerFilterCriteria {
@@ -593,5 +598,116 @@ export interface InvestmentReturnSummary {
   benchmarkTaiexPct: number;      // 大盤加權指數對比 %
   alphaTaiexPct: number;          // 對比大盤超額 Alpha %
   periodBreakdowns: InvestmentPeriodReturn[];
+}
+
+// ==========================================
+// 11. 智慧同業比較與相對估值 (Peer Valuation)
+// ==========================================
+
+export type PeerTagType = 'official' | 'supply_chain' | 'quant_cluster';
+
+export interface StockPeerTag {
+  stockId: string;
+  tagName: string;
+  tagType: PeerTagType;
+}
+
+export interface DailyStockMetric {
+  symbol: string;
+  tradeDate: string;
+  closePrice: number;
+  atr14: number;
+  forwardPe: number;
+  pbRatio: number;
+  pegRatio: number;
+  estimatedEps: number;
+  revYoYPct: number;
+  opmPct: number;                  // 營業利益率 OPM %
+  roePct: number;
+  instNetBuy5dRatio: number;       // 法人近5日買超佔成交量比 %
+  isCyclical?: boolean;            // 是否為景氣循環股 (航運/面板/記憶體等)
+}
+
+export type TradePlanStage =
+  | 'INITIAL'             // 初次建倉
+  | 'TP1_HIT_BREAKEVEN'   // 已達 TP1 (減碼 35% 並保本停損上移至成本)
+  | 'TP2_HIT_TRAILING'    // 已達 TP2 (基本面目標價獲利了結 35%，剩餘部位移動停利)
+  | 'CLOSED';             // 已結案出場
+
+export interface UserTradePlan {
+  id: string;
+  symbol: string;
+  name: string;
+  peerGroupTag: string;           // 錨定哪一個同業群組 (例: 'AI 伺服器散熱模組')
+  entryPrice: number;             // P0 買進成本現價
+  atr14: number;                  // 14 日真實波動均幅
+  riskUnit1R: number;             // 單股 1R 風險 = P0 - SL
+  slPrice: number;                // 停損價 = P0 - 2 * ATR (底線受同業 Q1 估值保護)
+  tp1Price: number;               // 保本止盈價 = min(P0 + 1.5R, P0 + 0.5 * (TP2 - P0))
+  tp2Price: number;               // 基本面目標價 = 預估 EPS * 同業中位數 PE * (1 + alpha)
+  tp3Price: number;               // 龍頭溢價極值 / 20MA 移動停利 = 預估 EPS * 同業 Q90 PE
+  upsideTp2Pct: number;           // 到 TP2 的潛在漲幅空間 %
+  riskRewardRatio: number;        // 風報比 = (TP2 - P0) / (P0 - SL)
+  isLowRiskRewardWarning: boolean;// 若 TP2 < P0 + 1.5R 或 RR < 1.3 觸發警示
+  warningMessage?: string;
+  suggestedShares: number;        // 根據自訂總資本與 1.5% 風險反推之買進股數
+  stage: TradePlanStage;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PeerValuationResult {
+  targetStock: ScreenerStockItem;
+  peerGroupTag: string;
+  peerGroupType: PeerTagType | 'custom';
+  peerStocks: ScreenerStockItem[];
+  peerMedianPe: number;           // 同業中位數 PE
+  peerTrimmedMedianPe: number;    // 剔除極端值之截尾中位數 PE
+  peerMedianPb: number;           // 同業中位數 PB
+  peerQ1Pe: number;               // 第 25 百分位 PE (支撐底線)
+  peerQ3Pe: number;               // 第 75 百分位 PE
+  peerQ3Opm: number;              // 第 75 百分位營業利益率
+  peerQ90Pe: number;              // 第 90 百分位 PE (龍頭溢價)
+  qualityPremiumAlpha: number;    // 營益率 > Q3 時給予之溢價係數 (例: +0.10)
+  targetEstimatedEps: number;     // 預估 EPS
+  targetFairValue: number;        // 基本面合理目標價 (錨定 TP2)
+  valuationMethod: 'PE' | 'PB';   // 主要估值方法 (景氣循環或 PE 失真時切換 PB)
+  isDiscounted: boolean;          // 是否相對同業折價
+  discountPct: number;            // 相對同業折價幅度 % (負值代表比同業便宜)
+  isCyclical: boolean;            // 景氣循環股識別
+  radarScores: {
+    valuationAttraction: number;  // 0~100 估值吸引力 (PE/PEG 倒數分位)
+    growthMomentum: number;       // 0~100 成長動能 (營收 YoY 分位)
+    profitMoat: number;           // 0~100 獲利護城河 (毛利率/OPM 分位)
+    capitalEfficiency: number;    // 0~100 資本效率 (ROE 分位)
+    chipConcentration: number;    // 0~100 籌碼集中度 (法人買超佔比分位)
+  };
+  regression: {
+    slope: number;                // 迴歸斜率
+    intercept: number;            // 迴歸截距
+    rSquared: number;             // 決定係數 R^2
+    isBelowRegressionLine: boolean; // 是否在迴歸線下方 (折價)
+  };
+  tradePlan: UserTradePlan;
+}
+
+// ==========================================
+// 12. 多策略評比與最佳推薦引擎
+// ==========================================
+
+export interface StrategyComparisonItem {
+  strategyId: string;
+  strategyName: string;
+  badge: string;
+  fitScore: number;               // 0~100 適配度評分
+  winRatePct: number;             // 預估歷史勝率 %
+  riskRewardRatio: number;        // 預期風報比
+  sharpeRatio: number;            // 夏普值
+  maxDrawdownPct: number;         // 歷史最大回撤 %
+  isBest: boolean;                // 是否為最佳推薦策略
+  recommendationReason: string;   // 白話推薦勝出原因
+  pros: string[];                 // 核心優勢
+  cons: string[];                 // 風險點
+  tradeSignal: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'WAIT';
 }
 

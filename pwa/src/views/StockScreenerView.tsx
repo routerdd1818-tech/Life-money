@@ -5,6 +5,7 @@ import {
   Briefcase,
   Check,
   CheckCircle2,
+  Compass,
   Eye,
   Filter,
   Flame,
@@ -27,8 +28,9 @@ import {
   STOCK_SECTORS,
 } from '../services/stockScreenerEngine';
 import { ScreenerFilterCriteria, ScreenerStockItem, StockSectorId, WatchlistType } from '../types';
+import { PeerValuationDashboard } from '../components/PeerValuationDashboard';
 
-type ScreenerSubTab = 'screener' | 'sectors' | 'watchlist' | 'guide';
+type ScreenerSubTab = 'screener' | 'peer_valuation' | 'sectors' | 'watchlist' | 'guide';
 type WatchlistCategory = 'watching' | 'holdings' | 'favorite';
 
 export const StockScreenerView: React.FC = () => {
@@ -43,6 +45,7 @@ export const StockScreenerView: React.FC = () => {
   } = useVault();
 
   const [subTab, setSubTab] = useState<ScreenerSubTab>('screener');
+  const [selectedValuationSymbol, setSelectedValuationSymbol] = useState<string>('3017.TW');
   const [watchlistCategory, setWatchlistCategory] = useState<WatchlistCategory>('watching');
   const [activeStrategyId, setActiveStrategyId] = useState<string>('bottom_up_all_star');
   const [showCustomSliders, setShowCustomSliders] = useState<boolean>(false);
@@ -181,10 +184,11 @@ export const StockScreenerView: React.FC = () => {
       <div className="toss-pill-bar">
         {(
           [
-            { id: 'screener', label: '🧠 智能選股漏斗' },
-            { id: 'sectors', label: '🌊 板塊資金輪動' },
+            { id: 'screener', label: '🧠 智能選股' },
+            { id: 'peer_valuation', label: '🧭 同業估值與策略評比' },
+            { id: 'sectors', label: '🌊 板塊輪動' },
             { id: 'watchlist', label: `⭐ 關注清單 (${watchlist.length})` },
-            { id: 'guide', label: '📖 策略與邏輯指南' },
+            { id: 'guide', label: '📖 選股指南' },
           ] as const
         ).map((tab) => (
           <button
@@ -707,6 +711,19 @@ export const StockScreenerView: React.FC = () => {
 
                         <button
                           type="button"
+                          onClick={() => {
+                            setSelectedValuationSymbol(stock.symbol);
+                            setSubTab('peer_valuation');
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-[#2563EB] text-xs font-semibold flex items-center gap-1 transition-colors"
+                          title="開啟智慧同業比較、相對估值目標價與 ATR 止盈停損階梯"
+                        >
+                          <Compass className="w-3.5 h-3.5" />
+                          <span>同業估值</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() =>
                             handleBuyIntoPortfolio({
                               symbol: stock.symbol,
@@ -729,6 +746,16 @@ export const StockScreenerView: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* =====================================================================
+          Sub-Tab 2: 🧭 智慧同業比較、相對估值定價與五大策略評比
+         ===================================================================== */}
+      {subTab === 'peer_valuation' && (
+        <PeerValuationDashboard
+          selectedSymbol={selectedValuationSymbol}
+          onSelectSymbol={setSelectedValuationSymbol}
+        />
       )}
 
       {/* =====================================================================

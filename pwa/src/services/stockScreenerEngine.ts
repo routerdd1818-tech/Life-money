@@ -79,6 +79,28 @@ export interface QuantStrategyPreset {
  */
 export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
   {
+    id: 'peer_relative_valuation',
+    name: '🧭 智慧同業相對估值折價策略',
+    badge: '最新估值',
+    rebalanceCycle: '每月營收與同業中位數更新時',
+    summary: '相較同業中位數顯著折價 + 高毛利護城河 + ATR 風報比 > 1.5 + 同業 Q1 支撐保護',
+    logicDetail:
+      '結合動態同業分群與相對估值定價模型：計算同業中位數 PE 與截尾估值，挑選體質優異且相較同業折價之錯殺股。自動將同業中位數錨定為 TP2 基本面目標價，並以 14 日 ATR 建立嚴格三階段止盈停損與部位風控階梯。',
+    criteria: {
+      sectorId: 'all',
+      minTurnoverYi: 8,
+      requirePositiveFcf: true,
+      minRoePct: 14,
+      maxPeRatio: 26,
+      minRevenueYoYPct: 8,
+      requireAboveMa60: true,
+      minMomentum60dPct: 3,
+      maxVolatilityPct: 35,
+      requireInstBuy: false,
+      requireTrustBuy: false,
+    },
+  },
+  {
     id: 'bottom_up_all_star',
     name: '🏆 四面向 Bottom-Up 全能複合策略',
     badge: '核心推薦',

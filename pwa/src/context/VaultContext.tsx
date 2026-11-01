@@ -17,8 +17,10 @@ import {
   SecurityHolding,
   ScreenerStockItem,
   SupportedCurrency,
+  TradePlanStage,
   Transaction,
   UserProfile,
+  UserTradePlan,
   VaultSettings,
   VehicleMaintenanceLog,
   VehicleProfile,
@@ -230,6 +232,50 @@ const DEFAULT_SAVINGS_GOALS: SavingsGoal[] = [
     updatedAt: new Date().toISOString(),
   },
 ];
+
+const DEFAULT_TRADE_PLANS: UserTradePlan[] = [
+  {
+    id: 'plan_3017_init',
+    symbol: '3017.TW',
+    name: '奇鋐',
+    peerGroupTag: 'ai_server_cooling',
+    entryPrice: 688,
+    atr14: 28.5,
+    riskUnit1R: 57,
+    slPrice: 631,
+    tp1Price: 755,
+    tp2Price: 822,
+    tp3Price: 915,
+    upsideTp2Pct: 19.5,
+    riskRewardRatio: 2.35,
+    isLowRiskRewardWarning: false,
+    suggestedShares: 263,
+    stage: 'INITIAL',
+    notes: '同業折價 16.3%，水冷板市佔擴張，營業利益率超越 Q3 獲品質溢價',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'plan_2330_init',
+    symbol: '2330.TW',
+    name: '台積電',
+    peerGroupTag: 'cowos_semicon',
+    entryPrice: 1065,
+    atr14: 32.0,
+    riskUnit1R: 64,
+    slPrice: 1001,
+    tp1Price: 1145,
+    tp2Price: 1225,
+    tp3Price: 1350,
+    upsideTp2Pct: 15.0,
+    riskRewardRatio: 2.5,
+    isLowRiskRewardWarning: false,
+    suggestedShares: 234,
+    stage: 'INITIAL',
+    notes: '先進製程與 CoWoS 產能爆滿，同業中位數估值合理錨定',
+    createdAt: new Date().toISOString(),
+  },
+];
+
 
 const todayDay = new Date().getDate();
 const dueSoonDay = ((todayDay + 3 - 1) % 28) + 1;
@@ -801,6 +847,7 @@ interface VaultContextValue {
   exchangeRates: ExchangeRatesTable;
   loans: LoanContract[];
   savingsGoals: SavingsGoal[];
+  tradePlans: UserTradePlan[];
   settings: VaultSettings;
   isQuoteSyncing: boolean;
   isCloudSyncing: boolean;
@@ -815,9 +862,12 @@ interface VaultContextValue {
   signInWithEmail: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
   signOut: () => Promise<void>;
 
-  // Actions - Screener & Watchlist
+  // Actions - Screener, Watchlist & Trade Plans (同業估值與動態交易計畫)
   upsertWatchlistItem: (item: WatchlistStockItem) => void;
   deleteWatchlistItem: (id: string) => void;
+  upsertTradePlan: (plan: UserTradePlan) => void;
+  deleteTradePlan: (id: string) => void;
+  updateTradePlanStage: (id: string, stage: TradePlanStage) => void;
 
   // Actions - Loans (房貸/車貸/信貸與逐期攤還雙軌記帳)
   upsertLoan: (loan: LoanContract) => void;
@@ -903,6 +953,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [exchangeRates, setExchangeRates] = useState<ExchangeRatesTable>(DEFAULT_EXCHANGE_RATES);
   const [loans, setLoans] = useState<LoanContract[]>(DEFAULT_LOANS);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(DEFAULT_SAVINGS_GOALS);
+  const [tradePlans, setTradePlans] = useState<UserTradePlan[]>(DEFAULT_TRADE_PLANS);
   const [settings, setSettings] = useState<VaultSettings>(DEFAULT_SETTINGS);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isQuoteSyncing, setIsQuoteSyncing] = useState(false);
@@ -934,6 +985,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (Array.isArray(parsed.watchlist)) setWatchlist(parsed.watchlist);
         if (Array.isArray(parsed.loans)) setLoans(parsed.loans);
         if (Array.isArray(parsed.savingsGoals)) setSavingsGoals(parsed.savingsGoals);
+        if (Array.isArray(parsed.tradePlans)) setTradePlans(parsed.tradePlans);
         if (parsed.exchangeRates) setExchangeRates(parsed.exchangeRates);
         if (typeof parsed.exchangeRateUsdTwd === 'number')
           setExchangeRateUsdTwd(parsed.exchangeRateUsdTwd);
@@ -1025,6 +1077,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       watchlist,
       loans,
       savingsGoals,
+      tradePlans,
       exchangeRates,
       exchangeRateUsdTwd,
       settings,
@@ -1046,6 +1099,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     watchlist,
     loans,
     savingsGoals,
+    tradePlans,
     exchangeRates,
     exchangeRateUsdTwd,
     settings,
@@ -1767,6 +1821,29 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setWatchlist((prev) => prev.filter((w) => w.id !== id));
   };
 
+  const upsertTradePlan = (plan: UserTradePlan) => {
+    setTradePlans((prev) => {
+      const exists = prev.some(
+        (p) => p.id === plan.id || p.symbol.toUpperCase() === plan.symbol.toUpperCase()
+      );
+      return exists
+        ? prev.map((p) =>
+            p.id === plan.id || p.symbol.toUpperCase() === plan.symbol.toUpperCase() ? plan : p
+          )
+        : [plan, ...prev];
+    });
+  };
+
+  const deleteTradePlan = (id: string) => {
+    setTradePlans((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const updateTradePlanStage = (id: string, stage: TradePlanStage) => {
+    setTradePlans((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, stage, updatedAt: new Date().toISOString() } : p))
+    );
+  };
+
   // =====================================================
   // 系統設定與 Supabase 雙向同步
   // =====================================================
@@ -1794,6 +1871,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           medical_records: medicalRecords,
           manual_calendar_events: manualCalendarEvents,
           watchlist,
+          trade_plans: tradePlans,
           loans,
           savings_goals: savingsGoals,
           exchange_rates: exchangeRates,
@@ -2016,6 +2094,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         watchlist,
         loans,
         savingsGoals,
+        tradePlans,
         exchangeRates,
         exchangeRateUsdTwd,
         settings,
@@ -2070,6 +2149,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         watchlist,
         loans,
         savingsGoals,
+        tradePlans,
         exchangeRates,
         currentUser,
         exchangeRateUsdTwd,
@@ -2084,6 +2164,9 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         signOut,
         upsertWatchlistItem,
         deleteWatchlistItem,
+        upsertTradePlan,
+        deleteTradePlan,
+        updateTradePlanStage,
         upsertLoan,
         deleteLoan,
         recordLoanPayment,

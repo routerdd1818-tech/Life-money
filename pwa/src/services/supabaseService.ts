@@ -14,6 +14,7 @@ import {
   SavingsGoal,
   SecurityHolding,
   Transaction,
+  UserTradePlan,
   VaultSettings,
   VehicleProfile,
   WatchlistStockItem,
@@ -37,6 +38,7 @@ export interface CloudVaultPayload {
   medical_records: MedicalRecord[];
   manual_calendar_events: CalendarEventItem[];
   watchlist?: WatchlistStockItem[];
+  trade_plans?: UserTradePlan[];
   loans?: LoanContract[];
   savings_goals?: SavingsGoal[];
   exchange_rates?: ExchangeRatesTable;

@@ -16,12 +16,14 @@ import {
   Plus,
   RefreshCw,
   Scale,
+  Search,
   Shield,
   ShieldAlert,
   Sparkles,
   Target,
   Trash2,
   TrendingUp,
+  X,
   Zap,
 } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
@@ -84,6 +86,24 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
+
+  // 4. 標的搜尋與過濾狀態
+  const [targetSearchQuery, setTargetSearchQuery] = useState('');
+
+  // 搜尋過濾後的候選標的
+  const filteredCandidates = useMemo(() => {
+    const q = targetSearchQuery.trim().toLowerCase();
+    if (!q) return screenerStocks;
+    return screenerStocks.filter((s) => {
+      return (
+        s.symbol.toLowerCase().includes(q) ||
+        s.symbol.replace(/\.(TW|TWO)$/i, '').toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q) ||
+        s.sectorName.toLowerCase().includes(q) ||
+        (s.subTheme || '').toLowerCase().includes(q)
+      );
+    });
+  }, [screenerStocks, targetSearchQuery]);
 
   // 目標股票
   const targetStock = useMemo(() => {
@@ -280,25 +300,50 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
           </span>
         </div>
 
-        {/* 熱門標的橫向切換藥丸 */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-          {screenerStocks.slice(0, 10).map((s) => {
-            const isSelected = s.symbol.toUpperCase() === targetStock.symbol.toUpperCase();
-            return (
+        {/* 標的快速搜尋框與候選標的藥丸 */}
+        <div className="space-y-2">
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-[#8B95A1] absolute left-3 pointer-events-none" />
+            <input
+              type="text"
+              value={targetSearchQuery}
+              onChange={(e) => setTargetSearchQuery(e.target.value)}
+              placeholder="快速搜尋估值標的 (例如 2330 / 奇鋐 / 鴻海 / 世芯)..."
+              className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-[#F6F7F9] dark:bg-[#1F2631] text-xs text-[#191F28] dark:text-[#F2F4F8] placeholder-[#8B95A1] border border-[#EAEDF2] dark:border-[#262C36] focus:border-[#2563EB] focus:outline-hidden"
+            />
+            {targetSearchQuery && (
               <button
-                key={s.symbol}
                 type="button"
-                onClick={() => onSelectSymbol(s.symbol)}
-                className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all border ${
-                  isSelected
-                    ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-sm'
-                    : 'bg-[#F6F7F9] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#CBD5E1]'
-                }`}
+                onClick={() => setTargetSearchQuery('')}
+                className="absolute right-2 p-0.5 text-[#8B95A1] hover:text-[#191F28]"
               >
-                {s.name} ({s.symbol.replace('.TW', '')})
+                <X className="w-3.5 h-3.5" />
               </button>
-            );
-          })}
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+            {filteredCandidates.slice(0, 16).map((s) => {
+              const isSelected = s.symbol.toUpperCase() === targetStock.symbol.toUpperCase();
+              return (
+                <button
+                  key={s.symbol}
+                  type="button"
+                  onClick={() => {
+                    onSelectSymbol(s.symbol);
+                    if (targetSearchQuery) setTargetSearchQuery('');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all border ${
+                    isSelected
+                      ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-sm'
+                      : 'bg-[#F6F7F9] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#CBD5E1]'
+                  }`}
+                >
+                  {s.name} ({s.symbol.replace('.TW', '')})
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* 標的股票卡片 */}

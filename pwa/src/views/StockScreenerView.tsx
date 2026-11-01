@@ -13,12 +13,14 @@ import {
   Layers,
   Plus,
   RotateCcw,
+  Search,
   SlidersHorizontal,
   Sparkles,
   Star,
   Trash2,
   TrendingUp,
   Wallet,
+  X,
 } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
 import {
@@ -68,11 +70,45 @@ export const StockScreenerView: React.FC = () => {
   const [wlStrategyTag, setWlStrategyTag] = useState('🏆 四面向 Bottom-Up 全能複合');
   const [wlNotes, setWlNotes] = useState('');
 
+  // 全局股票即時搜尋關鍵字
+  const [searchQuery, setSearchQuery] = useState('');
+
   // 執行五步漏斗選股
   const { funnelSteps, passedStocks } = useMemo(
     () => evaluateBottomUpFunnel(screenerStocks, criteria),
     [screenerStocks, criteria]
   );
+
+  // 全市場模糊搜尋匹配結果 (比對代碼、名稱、產業、題材、題材筆記)
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return screenerStocks.filter((s) => {
+      const matchSymbol =
+        s.symbol.toLowerCase().includes(q) ||
+        s.symbol.replace(/\.(TW|TWO)$/i, '').toLowerCase().includes(q);
+      const matchName = s.name.toLowerCase().includes(q);
+      const matchSector = s.sectorName.toLowerCase().includes(q);
+      const matchTheme = (s.subTheme || '').toLowerCase().includes(q);
+      const matchCatalyst = (s.catalystNote || '').toLowerCase().includes(q);
+      return matchSymbol || matchName || matchSector || matchTheme || matchCatalyst;
+    });
+  }, [screenerStocks, searchQuery]);
+
+  // 智能選股結果連動搜尋過濾
+  const filteredPassedStocks = useMemo(() => {
+    if (!searchQuery.trim()) return passedStocks;
+    const q = searchQuery.trim().toLowerCase();
+    return passedStocks.filter((s) => {
+      const matchSymbol =
+        s.symbol.toLowerCase().includes(q) ||
+        s.symbol.replace(/\.(TW|TWO)$/i, '').toLowerCase().includes(q);
+      const matchName = s.name.toLowerCase().includes(q);
+      const matchSector = s.sectorName.toLowerCase().includes(q);
+      const matchTheme = (s.subTheme || '').toLowerCase().includes(q);
+      return matchSymbol || matchName || matchSector || matchTheme;
+    });
+  }, [passedStocks, searchQuery]);
 
   // 計算八大板塊資金流向與輪轉象限
   const sectorFlowStats = useMemo(
@@ -180,6 +216,220 @@ export const StockScreenerView: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-24">
+      {/* 全局股票即時搜尋列 (支援代號、中文名稱、題材標籤模糊搜尋) */}
+      <section className="toss-card p-3.5 space-y-2.5">
+        <div className="relative flex items-center">
+          <Search className="w-4 h-4 text-[#8B95A1] absolute left-3.5 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜尋股票代號 (2330 / 3017 / NVDA / 0050) 或名稱 (台積電 / 奇鋐 / 散熱 / 高股息)..."
+            className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] text-xs sm:text-sm font-medium text-[#191F28] dark:text-[#F2F4F8] placeholder-[#8B95A1] border border-[#EAEDF2] dark:border-[#262C36] focus:border-[#2563EB] focus:outline-hidden transition-all"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 p-1 rounded-full text-[#8B95A1] hover:text-[#191F28] dark:hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* 熱門快捷搜尋標籤 */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-[11px]">
+          <span className="text-[#8B95A1] shrink-0 font-medium">熱門快搜：</span>
+          {[
+            { label: '台積電 2330', query: '2330' },
+            { label: '奇鋐 3017', query: '3017' },
+            { label: '雙鴻 3324', query: '3324' },
+            { label: '鴻海 2317', query: '2317' },
+            { label: '世芯 3661', query: '3661' },
+            { label: 'NVDA 輝達', query: 'NVDA' },
+            { label: '元大台灣50', query: '0050' },
+            { label: '液冷散熱', query: '散熱' },
+            { label: 'CoWoS封裝', query: 'CoWoS' },
+          ].map((tag) => (
+            <button
+              key={tag.query}
+              type="button"
+              onClick={() => setSearchQuery(tag.query)}
+              className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-all ${
+                searchQuery === tag.query
+                  ? 'bg-[#2563EB] text-white border-[#2563EB] font-bold'
+                  : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] border-transparent hover:border-[#CBD5E1]'
+              }`}
+            >
+              {tag.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 即時搜尋結果展開面板 (當有輸入關鍵字時呈現) */}
+        {searchQuery.trim().length > 0 && (
+          <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] space-y-2.5 animate-fade-in">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                🔍 搜尋結果（共找到 {searchResults.length} 檔相符股票）
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="text-[11px] text-[#2563EB] font-semibold hover:underline"
+              >
+                清空搜尋
+              </button>
+            </div>
+
+            {searchResults.length === 0 ? (
+              <div className="p-4 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] text-center space-y-1.5">
+                <div className="text-xs font-bold text-[#4E5968] dark:text-[#9BA4B0]">
+                  未找到代號或名稱包含「{searchQuery}」的預設股票
+                </div>
+                <p className="text-[11px] text-[#8B95A1]">
+                  您可以點選下方「新增自訂關注標的」手動輸入任何台美股代碼
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWlSymbol(searchQuery.toUpperCase());
+                    setSubTab('watchlist');
+                    setShowAddWatch(true);
+                  }}
+                  className="mt-1 px-3 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-semibold"
+                >
+                  以「{searchQuery.toUpperCase()}」建立自訂關注
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                {searchResults.map((stock) => {
+                  const watched = isInWatchlist(stock.symbol);
+                  const isHeld = isHeldInPortfolio(stock.symbol);
+                  return (
+                    <div
+                      key={stock.symbol}
+                      className="p-3 rounded-xl border border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#1F2631] hover:border-[#2563EB]/50 transition-all space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                              {stock.name}
+                            </span>
+                            <span className="text-xs font-mono text-[#8B95A1] font-semibold">
+                              {stock.symbol}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-[10px] font-semibold text-[#2563EB]">
+                              {stock.sectorName}
+                            </span>
+                            {isHeld && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-[10px] font-bold text-[#059669]">
+                                💼 持倉中
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[#8B95A1] mt-0.5">
+                            {stock.subTheme} · {stock.catalystNote}
+                          </div>
+                        </div>
+
+                        <div className="text-right tabular-nums shrink-0">
+                          <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                            {stock.market === 'US' ? 'USD ' : 'NT$ '}
+                            {stock.price.toLocaleString()}
+                          </div>
+                          <div
+                            className={`text-xs font-bold ${
+                              stock.dailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                            }`}
+                          >
+                            {stock.dailyChangePct >= 0 ? '▲ +' : '▼ '}
+                            {stock.dailyChangePct}%
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 量化財務數據標籤列 */}
+                      <div className="flex items-center gap-2 text-[10px] text-[#4E5968] dark:text-[#9BA4B0] tabular-nums">
+                        <span>P/E <strong>{stock.peRatio}</strong></span>
+                        <span>·</span>
+                        <span>ROE <strong>{stock.roePct}%</strong></span>
+                        <span>·</span>
+                        <span>
+                          營收 YoY{' '}
+                          <strong className={stock.revenueYoYPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'}>
+                            {stock.revenueYoYPct >= 0 ? '+' : ''}{stock.revenueYoYPct}%
+                          </strong>
+                        </span>
+                        <span>·</span>
+                        <span>殖利率 <strong>{stock.dividendYieldPct}%</strong></span>
+                      </div>
+
+                      {/* 動作按鈕列 */}
+                      <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-[#EAEDF2] dark:border-[#262C36]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedValuationSymbol(stock.symbol);
+                            setSubTab('peer_valuation');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-[#2563EB] text-xs font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <Compass className="w-3.5 h-3.5" />
+                          <span>同業估值</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddStockToWatchlist(stock, '搜尋新增', 'watching')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
+                            watched
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                              : 'bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0]'
+                          }`}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>{watched ? '已在清單' : '+ 觀察'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddStockToWatchlist(stock, '搜尋新增', 'favorite')}
+                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#F04452] hover:bg-rose-50 text-xs font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <Heart className="w-3.5 h-3.5" />
+                          <span>+ 喜好</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleBuyIntoPortfolio({
+                              symbol: stock.symbol,
+                              name: stock.name,
+                              price: stock.price,
+                              market: stock.market,
+                              dividendYieldPct: stock.dividendYieldPct,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>轉入持倉</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* 頂部子分頁切換器 */}
       <div className="toss-pill-bar">
         {(
@@ -524,15 +774,17 @@ export const StockScreenerView: React.FC = () => {
 
           {/* 3. 合格股票清單與四面向指標卡 */}
           <div className="space-y-3">
-            {passedStocks.length === 0 ? (
+            {filteredPassedStocks.length === 0 ? (
               <div className="toss-card p-8 text-center space-y-2">
-                <div className="text-sm font-bold">目前篩選條件較嚴格，暫無完全符合標的</div>
+                <div className="text-sm font-bold">
+                  {searchQuery ? `在目前篩選策略下，未找到包含「${searchQuery}」的合格股票` : '目前篩選條件較嚴格，暫無完全符合標的'}
+                </div>
                 <div className="text-xs text-[#8B95A1]">
-                  可點擊上方切換其他預設策略，或展開「自訂四面向參數」放寬本益比/營收門檻
+                  {searchQuery ? '可嘗試清除搜尋關鍵字，或放寬下方四面向指標門檻' : '可點擊上方切換其他預設策略，或展開「自訂四面向參數」放寬本益比/營收門檻'}
                 </div>
               </div>
             ) : (
-              passedStocks.map((stock) => {
+              filteredPassedStocks.map((stock) => {
                 const watched = isInWatchlist(stock.symbol);
                 return (
                   <div key={stock.symbol} className="toss-card p-4 space-y-3">
@@ -804,92 +1056,103 @@ export const StockScreenerView: React.FC = () => {
               </div>
             </div>
 
-            {/* 八大板塊卡片網格 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            {/* 八大板塊熱力方塊熱圖 (Heatmap Tile Blocks) */}
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
               {sectorFlowStats.map((sec) => {
                 const isSelected = selectedSectorId === sec.sectorId;
+                const isUp = sec.avgDailyChangePct > 0;
+                const isBigUp = sec.avgDailyChangePct >= 2.0;
+                const isDown = sec.avgDailyChangePct < 0;
+
+                // 方塊底色與邊框 (台股紅漲綠跌金融熱圖視覺)
+                const tileBgStyle = isBigUp
+                  ? 'bg-rose-50/90 dark:bg-rose-950/45 border-rose-300 dark:border-rose-900/80 text-rose-950 dark:text-rose-100'
+                  : isUp
+                    ? 'bg-red-50/50 dark:bg-red-950/25 border-red-200 dark:border-red-900/50 text-red-950 dark:text-red-100'
+                    : isDown
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60 text-emerald-950 dark:text-emerald-100'
+                      : 'bg-[#F6F7F9] dark:bg-[#1A202C] border-[#EAEDF2] dark:border-[#262C36] text-[#191F28] dark:text-[#F2F4F8]';
+
                 const stageBadgeStyle =
                   sec.rotationStage === 'leading'
-                    ? 'bg-red-50 dark:bg-red-950/40 text-[#F04452]'
+                    ? 'bg-red-100/90 dark:bg-red-900/60 text-[#F04452]'
                     : sec.rotationStage === 'accumulating'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-[#059669]'
+                      ? 'bg-emerald-100/90 dark:bg-emerald-900/60 text-[#059669]'
                       : sec.rotationStage === 'consolidating'
-                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600'
-                        : 'bg-slate-100 dark:bg-slate-800 text-[#8B95A1]';
+                        ? 'bg-amber-100/90 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300'
+                        : 'bg-slate-200/80 dark:bg-slate-800 text-[#8B95A1]';
 
                 return (
                   <button
                     key={sec.sectorId}
                     type="button"
                     onClick={() => setSelectedSectorId(sec.sectorId)}
-                    className={`p-3.5 rounded-2xl border text-left transition-all space-y-2.5 ${
+                    className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between space-y-2.5 ${tileBgStyle} ${
                       isSelected
-                        ? 'border-[#2563EB] bg-blue-50/40 dark:bg-blue-950/25 shadow-xs'
-                        : 'border-[#EAEDF2] dark:border-[#262C36] bg-white dark:bg-[#161B22] hover:border-[#CBD5E1]'
+                        ? 'ring-2 ring-[#2563EB] shadow-md border-[#2563EB] scale-[1.01]'
+                        : 'hover:border-[#2563EB]/40 hover:shadow-xs'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8] flex items-center gap-1.5">
+                    {/* 方塊頂部：Emoji、板塊名與輪動階段標籤 */}
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-sm font-bold truncate flex items-center gap-1">
                           <span>{sec.emoji}</span>
-                          <span>{sec.name}</span>
+                          <span className="truncate">{sec.name.replace('與', '/')}</span>
                         </div>
-                        <div className="text-[11px] text-[#8B95A1] mt-0.5">{sec.description}</div>
+                        <div className="text-[10px] text-[#8B95A1] truncate mt-0.5">
+                          {sec.description.split('、')[0]}等
+                        </div>
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${stageBadgeStyle}`}
+                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold shrink-0 ${stageBadgeStyle}`}
                       >
                         {sec.rotationLabel}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[#EAEDF2] dark:border-[#262C36] text-xs tabular-nums">
-                      <div>
-                        <div className="text-[10px] text-[#8B95A1]">今日平均漲跌</div>
-                        <div
-                          className={`font-bold ${
-                            sec.avgDailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }`}
-                        >
-                          {sec.avgDailyChangePct >= 0 ? '▲ +' : '▼ '}
-                          {sec.avgDailyChangePct}%
-                        </div>
+                    {/* 方塊核心：超大字今日平均漲跌幅 */}
+                    <div className="py-1">
+                      <div
+                        className={`text-xl sm:text-2xl font-black tabular-nums tracking-tight ${
+                          sec.avgDailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                        }`}
+                      >
+                        {sec.avgDailyChangePct >= 0 ? '▲ +' : '▼ '}
+                        {sec.avgDailyChangePct}%
                       </div>
-                      <div>
-                        <div className="text-[10px] text-[#8B95A1]">60日波段動能</div>
-                        <div
-                          className={`font-bold ${
-                            sec.avgMomentum60dPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }`}
-                        >
-                          {sec.avgMomentum60dPct >= 0 ? '+' : ''}
-                          {sec.avgMomentum60dPct}%
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-[#8B95A1]">資金成交佔比</div>
-                        <div className="font-bold text-[#191F28] dark:text-white">
-                          {sec.turnoverSharePct}%
-                        </div>
+                      <div className="flex items-center justify-between text-[10px] text-[#8B95A1] tabular-nums mt-0.5">
+                        <span>成交比重 <strong>{sec.turnoverSharePct}%</strong></span>
+                        <span>60D <strong>{sec.avgMomentum60dPct >= 0 ? '+' : ''}{sec.avgMomentum60dPct}%</strong></span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-[#4E5968] dark:text-[#9BA4B0] tabular-nums">
-                      <span>
-                        法人近5日：
+                    {/* 方塊底層：代表成分股微型磚 (Mini Tiles) */}
+                    <div className="pt-2 border-t border-black/5 dark:border-white/10 space-y-1.5">
+                      <div className="flex flex-wrap gap-1">
+                        {sec.topStocks.slice(0, 3).map((st) => (
+                          <span
+                            key={st.symbol}
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-medium tabular-nums ${
+                              st.dailyChangePct >= 0
+                                ? 'bg-red-100/80 dark:bg-red-900/40 text-[#F04452]'
+                                : 'bg-emerald-100/80 dark:bg-emerald-900/40 text-[#059669]'
+                            }`}
+                          >
+                            {st.name} {st.dailyChangePct >= 0 ? '+' : ''}{st.dailyChangePct}%
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="text-[10px] text-[#8B95A1] tabular-nums truncate flex items-center justify-between">
+                        <span>法人5日:</span>
                         <strong
-                          className={
-                            sec.netInstFlowLots >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }
+                          className={sec.netInstFlowLots >= 0 ? 'text-[#F04452]' : 'text-[#059669]'}
                         >
-                          {sec.netInstFlowLots >= 0 ? ' +' : ' '}
+                          {sec.netInstFlowLots >= 0 ? '+' : ''}
                           {sec.netInstFlowLots.toLocaleString()} 張
                         </strong>
-                      </span>
-                      <span>
-                        領頭羊：{sec.topStocks[0]?.name} ({sec.topStocks[0]?.dailyChangePct >= 0 ? '+' : ''}
-                        {sec.topStocks[0]?.dailyChangePct}%)
-                      </span>
+                      </div>
                     </div>
                   </button>
                 );
@@ -963,38 +1226,53 @@ export const StockScreenerView: React.FC = () => {
                           </div>
                         </div>
 
-                        {(() => {
-                          const existing = getWatchlistItem(st.symbol);
-                          if (!existing) {
-                            return (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddStockToWatchlist(st, `${activeSec.name}強勢股`, 'watching')}
-                                  className="px-2 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] text-xs font-medium transition-colors"
-                                  title="加入觀察清單"
-                                >
-                                  + 觀察
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddStockToWatchlist(st, `${activeSec.name}強勢股`, 'favorite')}
-                                  className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-[#F04452] text-xs font-semibold transition-colors flex items-center gap-0.5"
-                                  title="加入喜好清單"
-                                >
-                                  <Heart className="w-3 h-3 fill-current" />
-                                  <span>喜好</span>
-                                </button>
-                              </div>
-                            );
-                          }
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedValuationSymbol(st.symbol);
+                              setSubTab('peer_valuation');
+                            }}
+                            className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-[#2563EB] text-xs font-semibold flex items-center gap-0.5 transition-colors"
+                            title="進行同業估值與 TP1~TP3 分析"
+                          >
+                            <Compass className="w-3 h-3" />
+                            <span>估值</span>
+                          </button>
 
-                          return (
-                            <span className="text-[11px] font-semibold text-[#8B95A1] px-2 py-1 bg-[#F0F2F6] dark:bg-[#1F2631] rounded-lg">
-                              {existing.listType === 'favorite' ? '❤️ 喜好' : '👁️ 觀察'}
-                            </span>
-                          );
-                        })()}
+                          {(() => {
+                            const existing = getWatchlistItem(st.symbol);
+                            if (!existing) {
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddStockToWatchlist(st, `${activeSec.name}強勢股`, 'watching')}
+                                    className="px-2 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] text-xs font-medium transition-colors"
+                                    title="加入觀察清單"
+                                  >
+                                    + 觀察
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddStockToWatchlist(st, `${activeSec.name}強勢股`, 'favorite')}
+                                    className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-[#F04452] text-xs font-semibold transition-colors flex items-center gap-0.5"
+                                    title="加入喜好清單"
+                                  >
+                                    <Heart className="w-3 h-3 fill-current" />
+                                    <span>喜好</span>
+                                  </button>
+                                </>
+                              );
+                            }
+
+                            return (
+                              <span className="text-[11px] font-semibold text-[#8B95A1] px-2 py-1 bg-[#F0F2F6] dark:bg-[#1F2631] rounded-lg">
+                                {existing.listType === 'favorite' ? '❤️ 喜好' : '👁️ 觀察'}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </div>
                     </div>
                   ))}

@@ -53,44 +53,49 @@ const MainAppShell: React.FC = () => {
     <div className="min-h-screen bg-[#F6F7F9] dark:bg-[#0E1116] text-[#191F28] dark:text-[#F2F4F8]">
       {/* 頂部導航列 */}
       <header className="sticky top-0 z-30 bg-[#F6F7F9]/90 dark:bg-[#0E1116]/90 backdrop-blur-md border-b border-[#EAEDF2] dark:border-[#262C36]">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <BrandLogo className="w-8 h-8 rounded-lg shadow-2xs" />
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-[#191F28] dark:text-[#F2F4F8] leading-tight">
-                {headerMeta.title}
+        <div className="max-w-3xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
+          {/* 左側品牌與標題 (自適應截斷，避免推擠) */}
+          <div className="flex items-center gap-2 min-w-0 shrink">
+            <BrandLogo className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg shadow-2xs shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#191F28] dark:text-[#F2F4F8] leading-tight truncate">
+                {activeTab === 'screener' ? '選股決策' : headerMeta.title}
               </h1>
-              <p className="text-[11px] text-[#8B95A1] hidden sm:block">{headerMeta.subtitle}</p>
+              <p className="text-[11px] text-[#8B95A1] hidden sm:block truncate">
+                {headerMeta.subtitle}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* 右側快捷動作 (嚴禁折行與擠壓) */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => setQuickEntryOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors"
+              className="px-2.5 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors whitespace-nowrap shrink-0"
+              title="快速新增記帳交易"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>快速記帳</span>
+              <span className="hidden xs:inline">記帳</span>
             </button>
 
             {/* 使用者帳號與金庫切換快捷標籤 */}
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] dark:hover:text-white flex items-center gap-1.5 text-xs transition-colors"
+              className="px-2 py-1.5 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] dark:hover:text-white flex items-center gap-1 text-xs transition-colors shrink-0"
               title="使用者帳號與金庫設定"
             >
-              <User className="w-3.5 h-3.5 text-[#2563EB]" />
-              <span className="max-w-[70px] sm:max-w-[110px] truncate font-medium">
-                {currentUser?.displayName || currentUser?.username || '金庫帳號'}
+              <User className="w-3.5 h-3.5 text-[#2563EB] shrink-0" />
+              <span className="max-w-[55px] sm:max-w-[90px] truncate font-medium text-[11px]">
+                {currentUser?.displayName || currentUser?.username || '金庫'}
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] dark:hover:text-white flex items-center gap-1 text-xs"
+              className="p-1.5 sm:p-2 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] dark:hover:text-white flex items-center justify-center shrink-0"
               title="雲端同步與系統設定"
             >
               {settings.lastSyncedAt ? (

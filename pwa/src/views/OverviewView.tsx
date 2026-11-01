@@ -40,6 +40,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     isQuoteSyncing,
     refreshQuotes,
     exchangeRateUsdTwd,
+    settings,
   } = useVault();
 
   // 計算全投資組合未實現總損益
@@ -98,10 +99,22 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             type="button"
             disabled={isQuoteSyncing}
             onClick={() => void refreshQuotes()}
+            title="點擊立即向免費 API 同步即時匯率與股價"
             className="px-2.5 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] dark:hover:bg-[#2D3748] text-[11px] font-semibold text-[#4E5968] dark:text-[#9BA4B0] flex items-center gap-1.5 transition-colors tabular-nums"
           >
-            <RefreshCw className={`w-3 h-3 ${isQuoteSyncing ? 'animate-spin text-[#2563EB]' : ''}`} />
-            <span>{isQuoteSyncing ? '報價更新中' : `USD ${exchangeRateUsdTwd.toFixed(2)}`}</span>
+            <RefreshCw className={`w-3 h-3 ${isQuoteSyncing ? 'animate-spin text-[#2563EB]' : 'text-emerald-500'}`} />
+            <span>
+              {isQuoteSyncing
+                ? '行情同步中...'
+                : `USD $${exchangeRateUsdTwd.toFixed(2)} · ${
+                    settings.lastQuoteRefreshedAt
+                      ? new Date(settings.lastQuoteRefreshedAt).toLocaleTimeString('zh-TW', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '剛剛'
+                  }`}
+            </span>
           </button>
         </div>
 

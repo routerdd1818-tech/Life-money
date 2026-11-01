@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "npm --prefix pwa run dev",
-    "build": "npm --prefix pwa run build",
+    "build": "node build.js",
     "preview": "npm --prefix pwa run preview"
   }
 }

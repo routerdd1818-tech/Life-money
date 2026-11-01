@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Check,
+  Clock,
   CloudDownload,
   CloudUpload,
   Copy,
@@ -8,11 +9,13 @@ import {
   KeyRound,
   LogOut,
   Moon,
+  RefreshCw,
   Sun,
   Upload,
   User,
   UserPlus,
   X,
+  Zap,
 } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
 
@@ -28,6 +31,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     syncToCloud,
     restoreFromCloud,
     isCloudSyncing,
+    isQuoteSyncing,
+    refreshQuotes,
+    exchangeRateUsdTwd,
+    exchangeRates,
     exportVaultJson,
     importVaultJson,
     currentUser,
@@ -350,6 +357,117 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </>
             )}
           </button>
+        </div>
+
+        {/* 即時行情與牌告匯率固定更新設定 */}
+        <div className="space-y-3 p-3.5 rounded-2xl bg-[#F6F7F9] dark:bg-[#1F2631] border border-[#EAEDF2] dark:border-[#262C36]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-[#2563EB]" />
+              <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                即時行情與牌告匯率自動更新設定
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={isQuoteSyncing}
+              onClick={() => void refreshQuotes()}
+              className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 text-[#2563EB] text-[11px] font-bold flex items-center gap-1 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${isQuoteSyncing ? 'animate-spin' : ''}`} />
+              <span>{isQuoteSyncing ? '更新中...' : '立即手動刷新'}</span>
+            </button>
+          </div>
+
+          <div className="space-y-2.5 text-xs">
+            {/* 開啟 PWA / 切換前景時自動更新開關 */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36]">
+              <div>
+                <div className="font-semibold text-[#191F28] dark:text-[#F2F4F8]">
+                  打開 PWA 或切換回前景時自動更新
+                </div>
+                <div className="text-[11px] text-[#8B95A1]">
+                  每次重新開啟 App 或切換回畫面，自動拉取最新匯率與持股現價
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  updateSettings({
+                    autoRefreshOnOpen: !(settings.autoRefreshOnOpen ?? true),
+                  })
+                }
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                  (settings.autoRefreshOnOpen ?? true) ? 'bg-[#2563EB]' : 'bg-gray-300 dark:bg-gray-700'
+                }`}
+              >
+                <span
+                  className={`block w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                    (settings.autoRefreshOnOpen ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* 定時自動輪詢頻率下拉選單 */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36]">
+              <div>
+                <div className="font-semibold text-[#191F28] dark:text-[#F2F4F8]">
+                  背景固定定時自動輪詢更新
+                </div>
+                <div className="text-[11px] text-[#8B95A1]">
+                  在 App 開啟期間，每隔固定週期在背景自動更新匯率與報價
+                </div>
+              </div>
+              <select
+                value={settings.autoRefreshIntervalMinutes ?? 5}
+                onChange={(e) =>
+                  updateSettings({
+                    autoRefreshIntervalMinutes: Number(e.target.value),
+                  })
+                }
+                className="px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-[#F6F7F9] dark:bg-[#1F2631] text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8]"
+              >
+                <option value={0}>關閉定時 (僅手動/開App)</option>
+                <option value={3}>每 3 分鐘</option>
+                <option value={5}>每 5 分鐘 (推薦)</option>
+                <option value={10}>每 10 分鐘</option>
+                <option value={30}>每 30 分鐘</option>
+              </select>
+            </div>
+
+            {/* 即時牌告匯率快速看板與最後更新時間 */}
+            <div className="p-2.5 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-[#8B95A1]">
+                <span>即時牌告匯率 (以台幣計)：</span>
+                <span className="tabular-nums">
+                  最後更新：{settings.lastQuoteRefreshedAt ? new Date(settings.lastQuoteRefreshedAt).toLocaleTimeString('zh-TW') : '未更新'}
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-1.5 text-center text-xs tabular-nums font-mono">
+                <div className="p-1 rounded bg-gray-50 dark:bg-gray-800/60">
+                  <div className="text-[10px] text-[#8B95A1]">USD</div>
+                  <div className="font-bold">{exchangeRateUsdTwd.toFixed(2)}</div>
+                </div>
+                <div className="p-1 rounded bg-gray-50 dark:bg-gray-800/60">
+                  <div className="text-[10px] text-[#8B95A1]">JPY</div>
+                  <div className="font-bold">{(exchangeRates.JPY || 0.215).toFixed(4)}</div>
+                </div>
+                <div className="p-1 rounded bg-gray-50 dark:bg-gray-800/60">
+                  <div className="text-[10px] text-[#8B95A1]">CNY</div>
+                  <div className="font-bold">{(exchangeRates.CNY || 4.45).toFixed(2)}</div>
+                </div>
+                <div className="p-1 rounded bg-gray-50 dark:bg-gray-800/60">
+                  <div className="text-[10px] text-[#8B95A1]">KRW</div>
+                  <div className="font-bold">{(exchangeRates.KRW || 0.0235).toFixed(4)}</div>
+                </div>
+                <div className="p-1 rounded bg-gray-50 dark:bg-gray-800/60">
+                  <div className="text-[10px] text-[#8B95A1]">VND</div>
+                  <div className="font-bold">{(exchangeRates.VND || 0.00128).toFixed(5)}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Supabase 設定 */}

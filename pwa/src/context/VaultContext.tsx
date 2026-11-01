@@ -824,6 +824,9 @@ const DEFAULT_SETTINGS: VaultSettings = {
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZrcmdzY2J0Z3JpbWt0cWt3cW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1MTg1OTAsImV4cCI6MjEwOTA5NDU5MH0.oUGS-_GkfVljxifze9rW6TcE5Bi2fYqOHrB22J2GHfo',
   theme: 'light',
   autoSyncEnabled: false,
+  autoRefreshOnOpen: true,
+  autoRefreshIntervalMinutes: 5,
+  lastQuoteRefreshedAt: new Date().toISOString(),
 };
 
 interface VaultContextValue {
@@ -1109,19 +1112,79 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 5. 啟動時自動向免費報價 API 更新一次最新股價/債券ETF/基金淨值與匯率
   useEffect(() => {
     if (!isHydrated) return;
-    void refreshQuotes();
+    if (settings.autoRefreshOnOpen !== false) {
+      void refreshQuotes();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHydrated]);
+
+  // 6. 監聽 PWA 切換回前景 / 瀏覽器分頁重新 Focus 時自動更新
+  useEffect(() => {
+    if (!isHydrated || settings.autoRefreshOnOpen === false) return;
+
+    let lastActiveCheck = Date.now();
+
+    const handleResumeOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        const elapsedMs = Date.now() - lastActiveCheck;
+        // 若切回 App 且距離上次檢查超過 60 秒，自動觸發即時資料同步
+        if (elapsedMs > 60_000) {
+          lastActiveCheck = Date.now();
+          void refreshQuotes();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleResumeOrFocus);
+    window.addEventListener('focus', handleResumeOrFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleResumeOrFocus);
+      window.removeEventListener('focus', handleResumeOrFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, settings.autoRefreshOnOpen]);
+
+  // 7. 定時固定自動輪詢更新 (預設每 5 分鐘在前景自動拉取最新匯率與股價)
+  useEffect(() => {
+    if (!isHydrated) return;
+    const intervalMinutes = settings.autoRefreshIntervalMinutes ?? 5;
+    if (intervalMinutes <= 0) return;
+
+    const intervalMs = intervalMinutes * 60 * 1000;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshQuotes();
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, settings.autoRefreshIntervalMinutes]);
 
   const refreshQuotes = async () => {
     if (isQuoteSyncing) return;
     setIsQuoteSyncing(true);
     try {
-      const { updatedHoldings, exchangeRateUsdTwd: liveFx, exchangeRates: liveRates } =
-        await syncAllHoldingsQuotes(securityHoldings, exchangeRateUsdTwd, exchangeRates);
+      // 收集持倉、關注清單與熱門選股股票代碼一次性向 API 請求
+      const extraSyms = Array.from(
+        new Set([
+          ...watchlist.map((w) => w.symbol),
+          ...screenerStocks.slice(0, 15).map((s) => s.symbol),
+        ])
+      );
+
+      const { updatedHoldings, exchangeRateUsdTwd: liveFx, exchangeRates: liveRates, apiQuotes, refreshedAt } =
+        await syncAllHoldingsQuotes(securityHoldings, exchangeRateUsdTwd, exchangeRates, extraSyms);
+
       setSecurityHoldings(updatedHoldings);
       setExchangeRateUsdTwd(liveFx);
       if (liveRates) setExchangeRates(liveRates);
+
+      setSettings((prev) => ({
+        ...prev,
+        lastQuoteRefreshedAt: refreshedAt,
+      }));
 
       // 同步把最新報價映射到選股池與關注清單
       const priceMap = new Map<string, { price: number; prevClose?: number }>();
@@ -1130,6 +1193,14 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           price: h.currentPrice,
           prevClose: h.previousClose,
         });
+      }
+      for (const [sym, q] of Object.entries(apiQuotes)) {
+        if (!priceMap.has(sym.toUpperCase()) && q.price > 0) {
+          priceMap.set(sym.toUpperCase(), {
+            price: q.price,
+            prevClose: q.previousClose,
+          });
+        }
       }
 
       if (priceMap.size > 0) {

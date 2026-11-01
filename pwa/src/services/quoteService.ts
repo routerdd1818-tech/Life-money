@@ -356,26 +356,34 @@ export function findSecurityPreset(rawSymbol: string): SecurityPreset | undefine
 }
 
 /**
- * 批次向免費 Serverless 端點 (/api/quotes) 同步所有持倉最新收盤/即時價與匯率
+ * 批次向免費 Serverless 端點 (/api/quotes) 或直連開放端點同步持倉、自選股最新市價與 6 大外幣牌告匯率
  */
 export async function syncAllHoldingsQuotes(
   holdings: SecurityHolding[],
   currentUsdTwdRate: number,
-  currentRates?: ExchangeRatesTable
-): Promise<{ updatedHoldings: SecurityHolding[]; exchangeRateUsdTwd: number; exchangeRates: ExchangeRatesTable }> {
+  currentRates?: ExchangeRatesTable,
+  extraSymbols: string[] = []
+): Promise<{
+  updatedHoldings: SecurityHolding[];
+  exchangeRateUsdTwd: number;
+  exchangeRates: ExchangeRatesTable;
+  apiQuotes: Record<string, { price: number; previousClose?: number; updatedAt: string; source: string }>;
+  isSuccess: boolean;
+  refreshedAt: string;
+}> {
   let liveRates: ExchangeRatesTable = currentRates || DEFAULT_EXCHANGE_RATES;
-  if (holdings.length === 0) {
-    return { updatedHoldings: [], exchangeRateUsdTwd: currentUsdTwdRate, exchangeRates: liveRates };
-  }
-
-  const symbols = Array.from(new Set(holdings.map((h) => h.symbol.trim().toUpperCase())));
   let liveFx = currentUsdTwdRate || 32.18;
   let apiQuotes: ApiQuotesResponse['quotes'] = {};
+  let isSuccess = false;
+
+  const holdingSymbols = holdings.map((h) => h.symbol.trim().toUpperCase());
+  const allSymbols = Array.from(new Set([...holdingSymbols, ...extraSymbols.map((s) => s.trim().toUpperCase())])).filter(Boolean);
 
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 7500);
-    const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`, {
+    const queryParam = allSymbols.length > 0 ? `?symbols=${encodeURIComponent(allSymbols.join(','))}` : '';
+    const res = await fetch(`/api/quotes${queryParam}`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -391,9 +399,10 @@ export async function syncAllHoldingsQuotes(
       if (data.quotes) {
         apiQuotes = data.quotes;
       }
+      isSuccess = true;
     }
   } catch {
-    // 若處於純離線環境，嘗試免費匯率直連或優雅回退至本地基準價
+    // 若 Serverless 端點暫時無法連線，嘗試免費外匯 API 直連取得最新匯率
     try {
       const rRes = await fetch('https://open.er-api.com/v6/latest/USD');
       if (rRes.ok) {
@@ -410,10 +419,11 @@ export async function syncAllHoldingsQuotes(
             TWD: 1,
             updatedAt: new Date().toISOString(),
           };
+          isSuccess = true;
         }
       }
     } catch {
-      // keep existing liveFx
+      // 保持現存匯率
     }
   }
 
@@ -444,5 +454,8 @@ export async function syncAllHoldingsQuotes(
     updatedHoldings,
     exchangeRateUsdTwd: liveFx,
     exchangeRates: liveRates,
+    apiQuotes,
+    isSuccess,
+    refreshedAt: nowIso,
   };
 }

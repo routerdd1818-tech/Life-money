@@ -66,12 +66,11 @@
 專案根目錄已配置好 `vercel.json` 與 `api/quotes.ts`：
 
 ### 方法 A：使用 GitHub + Vercel Dashboard (最推薦)
-1. 將 `/Users/routertt/Documents/VSCode/FinanceLife-PWA` 推送到你的 GitHub Repo。
-2. 登入 [Vercel](https://vercel.com/)，點擊 **Add New...** -> **Project** -> 匯入該 GitHub Repo。
-3. **專案設定確認**：
-   * Root Directory 保持根目錄 `./`
-   * Build Command: `cd pwa && npm install && npm run build`（已由 `vercel.json` 自動指定）
-   * Output Directory: `pwa/dist`（已由 `vercel.json` 自動指定）
+1. 將專案推送到 GitHub Repo (`routerdd1818-tech/Life-money`)。
+2. 登入 [Vercel](https://vercel.com/)，匯入該 GitHub Repo。
+3. **專案設定確認 (雙相容架構)**：
+   * 無論 Vercel 的 **Root Directory** 設定為根目錄 `./` 或是 `pwa/`，本專案皆已內建通用 `build.js` 與 `pwa/vercel.json` 自動相容建置。
+   * 不需要手動修改 Build Command 或 Output Directory，系統會自動編譯並鏡像部署至 `dist`。
 4. 點擊 **Deploy**，約 1 分鐘即可上線完成！
 
 ### 方法 B：使用 Vercel CLI 直接部署

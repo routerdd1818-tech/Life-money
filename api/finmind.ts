@@ -15,6 +15,11 @@ interface VercelResponseLike {
   json: (body: unknown) => void;
 }
 
+const DEFAULT_FINMIND_TOKEN =
+  process.env.FINMIND_API_TOKEN ||
+  process.env.VITE_FINMIND_TOKEN ||
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoidGFuZzkyMTExOCIsImVtYWlsIjoidGFuZ2doZ2hAZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.eV8XmNzmgJGDp2azc5NoX8jgg1PYQNdbn9Cc9CecpH0';
+
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike): Promise<void> {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -36,6 +41,11 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
         searchParams.set(key, value);
       }
     }
+  }
+
+  // 若前端未附帶 token，後端代理自動附加預設已授權 Token 享受 600 次/小時配額
+  if (!searchParams.has('token') && DEFAULT_FINMIND_TOKEN) {
+    searchParams.set('token', DEFAULT_FINMIND_TOKEN.trim());
   }
 
   const targetUrl = `https://api.finmindtrade.com/api/v4/data?${searchParams.toString()}`;

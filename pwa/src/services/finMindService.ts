@@ -64,6 +64,10 @@ export interface FinMindAggregatedStockData {
 const CACHE_PREFIX = 'finmind_cache_v1_';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 小時快取
 
+export const DEFAULT_FINMIND_TOKEN =
+  (typeof import.meta !== 'undefined' && (import.meta.env?.VITE_FINMIND_TOKEN as string)) ||
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoidGFuZzkyMTExOCIsImVtYWlsIjoidGFuZ2doZ2hAZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.eV8XmNzmgJGDp2azc5NoX8jgg1PYQNdbn9Cc9CecpH0';
+
 function getCleanStockId(rawSymbol: string): string {
   const clean = rawSymbol.trim().toUpperCase().replace(/\.(TW|TWO)$/i, '');
   return clean;
@@ -116,8 +120,9 @@ async function callFinMindDataset<T>(
     ...extraParams,
   });
 
-  if (token && token.trim()) {
-    query.set('token', token.trim());
+  const effectiveToken = (token && token.trim()) || DEFAULT_FINMIND_TOKEN;
+  if (effectiveToken) {
+    query.set('token', effectiveToken.trim());
   }
 
   // 優先嘗試本地或代理端點，若無法連通則直連 FinMind 官方端點

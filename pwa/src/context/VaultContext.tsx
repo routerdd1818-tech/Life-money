@@ -822,6 +822,9 @@ const DEFAULT_SETTINGS: VaultSettings = {
   supabaseAnonKey:
     (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ||
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZrcmdzY2J0Z3JpbWt0cWt3cW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1MTg1OTAsImV4cCI6MjEwOTA5NDU5MH0.oUGS-_GkfVljxifze9rW6TcE5Bi2fYqOHrB22J2GHfo',
+  finMindToken:
+    (import.meta.env.VITE_FINMIND_TOKEN as string) ||
+    'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoidGFuZzkyMTExOCIsImVtYWlsIjoidGFuZ2doZ2hAZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.eV8XmNzmgJGDp2azc5NoX8jgg1PYQNdbn9Cc9CecpH0',
   theme: 'light',
   autoSyncEnabled: false,
   autoRefreshOnOpen: true,
@@ -999,6 +1002,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             ...parsed.settings,
             supabaseUrl: parsed.settings.supabaseUrl || DEFAULT_SETTINGS.supabaseUrl,
             supabaseAnonKey: parsed.settings.supabaseAnonKey || DEFAULT_SETTINGS.supabaseAnonKey,
+            finMindToken: parsed.settings.finMindToken || DEFAULT_SETTINGS.finMindToken,
           });
         }
       }

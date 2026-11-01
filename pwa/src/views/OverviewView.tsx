@@ -12,6 +12,7 @@ import {
 import { useVault } from '../context/VaultContext';
 import { buildUnifiedCalendarEvents } from '../services/financeEngine';
 import { MainTabId } from '../types';
+import { formatDataTimestamp } from '../utils/formatters';
 
 interface OverviewViewProps {
   onNavigateTab: (tab: MainTabId) => void;
@@ -91,29 +92,27 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     <div className="space-y-4 pb-24">
       {/* 1. Hero 淨資產總額大字卡 */}
       <section className="toss-card p-5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-[#4E5968] dark:text-[#9BA4B0]">
-            個人淨資產總額 (Net Worth)
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#4E5968] dark:text-[#9BA4B0]">
+              個人淨資產總額 (Net Worth)
+            </span>
+            <span className="text-[10px] text-[#8B95A1] tabular-nums">
+              · 更新時間：{formatDataTimestamp(settings.lastQuoteRefreshedAt)}
+            </span>
+          </div>
           <button
             type="button"
             disabled={isQuoteSyncing}
             onClick={() => void refreshQuotes()}
             title="點擊立即向免費 API 同步即時匯率與股價"
-            className="px-2.5 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] dark:hover:bg-[#2D3748] text-[11px] font-semibold text-[#4E5968] dark:text-[#9BA4B0] flex items-center gap-1.5 transition-colors tabular-nums"
+            className="px-2.5 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] dark:hover:bg-[#2D3748] text-[11px] font-semibold text-[#4E5968] dark:text-[#9BA4B0] flex items-center gap-1.5 transition-colors tabular-nums self-start sm:self-auto"
           >
             <RefreshCw className={`w-3 h-3 ${isQuoteSyncing ? 'animate-spin text-[#2563EB]' : 'text-emerald-500'}`} />
             <span>
               {isQuoteSyncing
                 ? '行情同步中...'
-                : `USD $${exchangeRateUsdTwd.toFixed(2)} · ${
-                    settings.lastQuoteRefreshedAt
-                      ? new Date(settings.lastQuoteRefreshedAt).toLocaleTimeString('zh-TW', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : '剛剛'
-                  }`}
+                : `USD $${exchangeRateUsdTwd.toFixed(2)} · 即時更新`}
             </span>
           </button>
         </div>

@@ -5,6 +5,7 @@ import {
   Briefcase,
   Check,
   CheckCircle2,
+  Clock,
   Compass,
   Eye,
   Filter,
@@ -12,6 +13,7 @@ import {
   Heart,
   Layers,
   Plus,
+  RefreshCw,
   RotateCcw,
   Search,
   SlidersHorizontal,
@@ -31,6 +33,7 @@ import {
 } from '../services/stockScreenerEngine';
 import { ScreenerFilterCriteria, ScreenerStockItem, StockSectorId, WatchlistType } from '../types';
 import { PeerValuationDashboard } from '../components/PeerValuationDashboard';
+import { formatDataTimestamp, formatMinutesAgo } from '../utils/formatters';
 
 type ScreenerSubTab = 'screener' | 'peer_valuation' | 'sectors' | 'watchlist' | 'guide';
 type WatchlistCategory = 'watching' | 'holdings' | 'favorite';
@@ -44,12 +47,15 @@ export const StockScreenerView: React.FC = () => {
     securityHoldings,
     upsertSecurityHolding,
     exchangeRateUsdTwd,
+    settings,
+    refreshQuotes,
+    isQuoteSyncing,
   } = useVault();
 
   const [subTab, setSubTab] = useState<ScreenerSubTab>('screener');
   const [selectedValuationSymbol, setSelectedValuationSymbol] = useState<string>('3017.TW');
   const [watchlistCategory, setWatchlistCategory] = useState<WatchlistCategory>('watching');
-  const [activeStrategyId, setActiveStrategyId] = useState<string>('bottom_up_all_star');
+  const [activeStrategyId, setActiveStrategyId] = useState<string>('highest_win_rate_alpha');
   const [showCustomSliders, setShowCustomSliders] = useState<boolean>(false);
   const [criteria, setCriteria] = useState<ScreenerFilterCriteria>(
     QUANT_STRATEGIES[0].criteria
@@ -67,7 +73,7 @@ export const StockScreenerView: React.FC = () => {
   const [wlPrice, setWlPrice] = useState('');
   const [wlTargetBuy, setWlTargetBuy] = useState('');
   const [wlStopLoss, setWlStopLoss] = useState('');
-  const [wlStrategyTag, setWlStrategyTag] = useState('🏆 四面向 Bottom-Up 全能複合');
+  const [wlStrategyTag, setWlStrategyTag] = useState('法人雙認養起漲共振策略');
   const [wlNotes, setWlNotes] = useState('');
 
   // 全局股票即時搜尋關鍵字
@@ -216,6 +222,27 @@ export const StockScreenerView: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-24">
+      {/* 行情與財務資料時間狀態列 (精準到分鐘 + 一鍵同步刷新) */}
+      <div className="flex items-center justify-between px-1 text-xs text-[#8B95A1] tabular-nums">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="font-medium text-[#4E5968] dark:text-[#9BA4B0]">
+            資料時間：<strong className="text-[#191F28] dark:text-[#F2F4F8]">{formatDataTimestamp(settings.lastQuoteRefreshedAt)}</strong> (精準至分)
+          </span>
+          <span className="text-[11px] text-[#8B95A1]">· {formatMinutesAgo(settings.lastQuoteRefreshedAt)}</span>
+        </div>
+
+        <button
+          type="button"
+          disabled={isQuoteSyncing}
+          onClick={() => void refreshQuotes()}
+          className="px-2.5 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] dark:hover:bg-[#262C36] text-[11px] font-semibold text-[#2563EB] flex items-center gap-1 transition-all disabled:opacity-50"
+        >
+          <RefreshCw className={`w-3 h-3 ${isQuoteSyncing ? 'animate-spin' : ''}`} />
+          <span>{isQuoteSyncing ? '同步中...' : '即時刷新'}</span>
+        </button>
+      </div>
+
       {/* 全局股票即時搜尋列 (支援代號、中文名稱、題材標籤模糊搜尋) */}
       <section className="toss-card p-3.5 space-y-2.5">
         <div className="relative flex items-center">
@@ -327,7 +354,7 @@ export const StockScreenerView: React.FC = () => {
                             </span>
                             {isHeld && (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-[10px] font-bold text-[#059669]">
-                                💼 持倉中
+                                持倉
                               </span>
                             )}
                           </div>
@@ -434,11 +461,11 @@ export const StockScreenerView: React.FC = () => {
       <div className="toss-pill-bar">
         {(
           [
-            { id: 'screener', label: '🧠 智能選股' },
-            { id: 'peer_valuation', label: '🧭 同業估值與策略評比' },
-            { id: 'sectors', label: '🌊 板塊輪動' },
-            { id: 'watchlist', label: `⭐ 關注清單 (${watchlist.length})` },
-            { id: 'guide', label: '📖 選股指南' },
+            { id: 'screener', label: '智能選股' },
+            { id: 'peer_valuation', label: '同業估值與策略' },
+            { id: 'sectors', label: '板塊輪動' },
+            { id: 'watchlist', label: `自選清單 (${watchlist.length})` },
+            { id: 'guide', label: '選股指南' },
           ] as const
         ).map((tab) => (
           <button
@@ -872,7 +899,7 @@ export const StockScreenerView: React.FC = () => {
                           {stock.momentum60dPct}%
                         </div>
                         <div className="text-[10px] text-[#4E5968] dark:text-[#9BA4B0]">
-                          {stock.aboveMa60 ? '✅ 站上季線' : '⚠️ 季線下'} · 波動{' '}
+                          {stock.aboveMa60 ? '站上季線' : '季線下'} · 波動{' '}
                           {stock.annualVolatilityPct}%
                         </div>
                       </div>
@@ -915,7 +942,7 @@ export const StockScreenerView: React.FC = () => {
                     {/* 法說與題材展望 + 行動按鈕 */}
                     <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                       <p className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0]">
-                        💡 <strong>題材與法說展望：</strong>
+                        <strong>題材與展望：</strong>
                         {stock.catalystNote}
                       </p>
 
@@ -932,7 +959,7 @@ export const StockScreenerView: React.FC = () => {
                                   title="加入觀察清單"
                                 >
                                   <Eye className="w-3.5 h-3.5 text-[#2563EB]" />
-                                  <span>+ 觀察</span>
+                                  <span>觀察</span>
                                 </button>
                                 <button
                                   type="button"
@@ -941,7 +968,7 @@ export const StockScreenerView: React.FC = () => {
                                   title="加入喜好清單"
                                 >
                                   <Heart className="w-3.5 h-3.5 fill-current" />
-                                  <span>+ 喜好</span>
+                                  <span>喜好</span>
                                 </button>
                               </>
                             );
@@ -956,7 +983,7 @@ export const StockScreenerView: React.FC = () => {
                               }`}
                             >
                               <Check className="w-3.5 h-3.5" />
-                              <span>{existing.listType === 'favorite' ? '❤️ 喜好中' : '👁️ 觀察中'}</span>
+                              <span>{existing.listType === 'favorite' ? '已在喜好' : '已在觀察'}</span>
                             </span>
                           );
                         })()}
@@ -1384,7 +1411,7 @@ export const StockScreenerView: React.FC = () => {
             >
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                  手動新增標的至 {wlListType === 'favorite' ? '❤️ 喜好清單' : '👁️ 觀察清單'}
+                  手動新增標的至 {wlListType === 'favorite' ? '喜好清單' : '觀察清單'}
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <label className="flex items-center gap-1 cursor-pointer">
@@ -1797,7 +1824,7 @@ export const StockScreenerView: React.FC = () => {
                                   : 'text-[#4E5968] dark:text-[#9BA4B0]'
                               }
                             >
-                              🎯 理想買點：${item.targetBuyPrice.toLocaleString()}{' '}
+                              目標買點：${item.targetBuyPrice.toLocaleString()}{' '}
                               {isInBuyZone ? '(已達擊球區！)' : ''}
                             </span>
                           )}
@@ -1807,7 +1834,7 @@ export const StockScreenerView: React.FC = () => {
                                 isStopLoss ? 'font-bold text-[#F04452]' : 'text-[#8B95A1]'
                               }
                             >
-                              🛡️ 紀律停損：${item.stopLossPrice.toLocaleString()}{' '}
+                              停損價位：${item.stopLossPrice.toLocaleString()}{' '}
                               {isStopLoss ? '(觸發停損警戒！)' : ''}
                             </span>
                           )}

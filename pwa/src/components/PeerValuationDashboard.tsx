@@ -41,6 +41,7 @@ import {
   TradePlanStage,
   UserTradePlan,
 } from '../types';
+import { formatDataTimestamp } from '../utils/formatters';
 
 interface PeerValuationDashboardProps {
   selectedSymbol: string;
@@ -61,6 +62,7 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
     upsertTradePlan,
     deleteTradePlan,
     updateTradePlanStage,
+    settings,
   } = useVault();
 
   // 1. 同業分群模式與設定
@@ -288,16 +290,21 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
 
       {/* 1. 標的股票選擇器與頂部核心資訊 */}
       <section className="toss-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Compass className="w-4 h-4 text-[#2563EB]" />
             <h2 className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
               智慧同業比較與相對估值引擎
             </h2>
           </div>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-[#2563EB]">
-            動態估值定價
-          </span>
+          <div className="flex items-center gap-2 text-xs tabular-nums">
+            <span className="text-[11px] text-[#8B95A1]">
+              資料時間：<strong className="text-[#191F28] dark:text-[#F2F4F8]">{formatDataTimestamp(settings.lastQuoteRefreshedAt)}</strong> (分)
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-[#2563EB]">
+              動態估值定價
+            </span>
+          </div>
         </div>
 
         {/* 標的快速搜尋框與候選標的藥丸 */}
@@ -406,10 +413,10 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
         {/* 4 大分群模式 Segmented Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
           {[
-            { id: 'supply_chain', label: '⛓️ 概念供應鏈', desc: '上下游細分族群' },
-            { id: 'official', label: '🏢 官方產業', desc: '證交所大分類' },
-            { id: 'algo', label: '🤖 AI 相似推薦', desc: '財報特徵餘弦匹配' },
-            { id: 'custom', label: '🧺 自訂籃子', desc: '自由增刪對標' },
+            { id: 'supply_chain', label: '概念供應鏈', desc: '上下游細分族群' },
+            { id: 'official', label: '官方產業', desc: '證交所大分類' },
+            { id: 'algo', label: 'AI 相似推薦', desc: '財報特徵餘弦匹配' },
+            { id: 'custom', label: '自訂籃子', desc: '自由增刪對標' },
           ].map((mode) => (
             <button
               key={mode.id}
@@ -836,7 +843,7 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
           {/* 停損價 SL */}
           <div className="p-3 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40">
             <div className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">
-              🛑 停損價 (SL)
+              停損價 (SL)
             </div>
             <div className="text-base sm:text-lg font-extrabold text-rose-600 tabular-nums mt-0.5">
               ${valuationResult.tradePlan.slPrice}
@@ -849,7 +856,7 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
           {/* 現價成本 P0 */}
           <div className="p-3 rounded-2xl bg-[#F6F7F9] dark:bg-[#1F2631] border border-[#EAEDF2] dark:border-[#262C36]">
             <div className="text-[10px] font-bold text-[#8B95A1] uppercase tracking-wider">
-              📍 買進現價 (P₀)
+              買進現價 (P₀)
             </div>
             <div className="text-base sm:text-lg font-extrabold text-[#191F28] dark:text-[#F2F4F8] tabular-nums mt-0.5">
               ${valuationResult.tradePlan.entryPrice}
@@ -862,7 +869,7 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
           {/* 保本止盈價 TP1 */}
           <div className="p-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40">
             <div className="text-[10px] font-bold text-[#2563EB] uppercase tracking-wider">
-              🛡️ 保本止盈 (TP1)
+              保本止盈 (TP1)
             </div>
             <div className="text-base sm:text-lg font-extrabold text-[#2563EB] tabular-nums mt-0.5">
               ${valuationResult.tradePlan.tp1Price}
@@ -875,7 +882,7 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
           {/* 基本面目標價 TP2 */}
           <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40">
             <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
-              🎯 核心目標 (TP2)
+              核心目標 (TP2)
             </div>
             <div className="text-base sm:text-lg font-extrabold text-emerald-600 tabular-nums mt-0.5">
               ${valuationResult.tradePlan.tp2Price}
@@ -888,7 +895,7 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
           {/* 趨勢延伸價 TP3 */}
           <div className="p-3 rounded-2xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/40 col-span-2 sm:col-span-1">
             <div className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">
-              🚀 龍頭重估 (TP3)
+              龍頭溢價 (TP3)
             </div>
             <div className="text-base sm:text-lg font-extrabold text-purple-600 tabular-nums mt-0.5">
               ${valuationResult.tradePlan.tp3Price}
@@ -960,27 +967,27 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
               className="px-4 py-2 rounded-xl bg-[#2563EB] text-white text-xs font-bold hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Bookmark className="w-3.5 h-3.5" />
-              <span>{activeTradePlan ? '更新至我的交易計畫' : '💾 儲存為我的交易計畫'}</span>
+              <span>{activeTradePlan ? '更新至我的交易計畫' : '儲存為我的交易計畫'}</span>
             </button>
             <button
               type="button"
               onClick={() => handleAddToWatch('watching')}
               className="px-3 py-2 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-[#191F28] dark:text-[#F2F4F8] text-xs font-semibold hover:bg-gray-200 transition-colors"
             >
-              ⭐ 加入觀察清單
+              加入觀察清單
             </button>
             <button
               type="button"
               onClick={() => handleAddToWatch('favorite')}
               className="px-3 py-2 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-[#191F28] dark:text-[#F2F4F8] text-xs font-semibold hover:bg-gray-200 transition-colors"
             >
-              ❤️ 加入自選核心
+              加入自選核心
             </button>
           </div>
         </div>
       </section>
 
-      {/* 6. 🏆 策略量化評比取最佳與「推薦原因」詳解面板 */}
+      {/* 6. 策略量化評比取最佳與「推薦原因」詳解面板 */}
       <section className="toss-card p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1169,10 +1176,10 @@ export const PeerValuationDashboard: React.FC<PeerValuationDashboardProps> = ({
                             : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
                         }`}
                       >
-                        {plan.stage === 'INITIAL' && '📍 建倉監控中'}
-                        {plan.stage === 'TP1_HIT_BREAKEVEN' && '🛡️ 已達 TP1 (保本減碼35%)'}
-                        {plan.stage === 'TP2_HIT_TRAILING' && '🎯 已達 TP2 (移動停利30%)'}
-                        {plan.stage === 'CLOSED' && '🏁 已結案'}
+                        {plan.stage === 'INITIAL' && '建倉監控中'}
+                        {plan.stage === 'TP1_HIT_BREAKEVEN' && '已達 TP1 (保本減碼35%)'}
+                        {plan.stage === 'TP2_HIT_TRAILING' && '已達 TP2 (移動停利30%)'}
+                        {plan.stage === 'CLOSED' && '已結案'}
                       </span>
                     </div>
 

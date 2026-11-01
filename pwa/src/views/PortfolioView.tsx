@@ -30,6 +30,7 @@ import {
   findSecurityPreset,
   SECURITY_PRESETS,
 } from '../services/quoteService';
+import { formatDataTimestamp } from '../utils/formatters';
 import {
   analyzePortfolioEtfOverlap,
   ETF_PROFILES,
@@ -58,13 +59,13 @@ type PortfolioSubTab =
 
 const PORTFOLIO_TABS = [
   { id: 'holdings', label: '股票/債券/基金' },
-  { id: 'etf', label: '📊 ETF 專區' },
-  { id: 'returns', label: '📈 報酬率分析' },
-  { id: 'accounts', label: '💼 多幣別帳戶' },
-  { id: 'rates', label: '💱 常用匯率換算' },
-  { id: 'savings', label: '🎯 存錢計畫' },
-  { id: 'dividends', label: '📅 股息月曆' },
-  { id: 'networth', label: '📉 淨值結構' },
+  { id: 'etf', label: 'ETF 專區' },
+  { id: 'returns', label: '報酬率分析' },
+  { id: 'accounts', label: '多幣別帳戶' },
+  { id: 'rates', label: '常用匯率' },
+  { id: 'savings', label: '存錢計畫' },
+  { id: 'dividends', label: '股息月曆' },
+  { id: 'networth', label: '淨值結構' },
 ] as const;
 
 export const PortfolioView: React.FC = () => {
@@ -86,6 +87,7 @@ export const PortfolioView: React.FC = () => {
     depositToSavingsGoal,
     isQuoteSyncing,
     refreshQuotes,
+    settings,
   } = useVault();
 
   const [subTab, setSubTab] = useState<PortfolioSubTab>('holdings');
@@ -243,8 +245,14 @@ export const PortfolioView: React.FC = () => {
           <div className="toss-card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs text-[#8B95A1]">
-                  證券投資總市值 (免費 API 自動計價 · 1 USD = {exchangeRateUsdTwd.toFixed(2)} TWD)
+                <div className="text-xs text-[#8B95A1] flex items-center gap-1.5 flex-wrap">
+                  <span>證券投資總市值</span>
+                  <span>·</span>
+                  <span className="tabular-nums font-medium text-[#4E5968] dark:text-[#9BA4B0]">
+                    資料時間：{formatDataTimestamp(settings.lastQuoteRefreshedAt)}
+                  </span>
+                  <span>·</span>
+                  <span>1 USD = {exchangeRateUsdTwd.toFixed(2)} TWD</span>
                 </div>
                 <div className="text-2xl font-bold tabular-nums text-[#191F28] dark:text-[#F2F4F8]">
                   NT$ {netWorthSummary.investmentTotal.toLocaleString()}

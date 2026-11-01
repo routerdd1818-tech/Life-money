@@ -12,6 +12,7 @@ import { PortfolioView } from './views/PortfolioView';
 import { StockScreenerView } from './views/StockScreenerView';
 import { LifeVaultView } from './views/LifeVaultView';
 import { CalendarView } from './views/CalendarView';
+import { AuthGateView } from './views/AuthGateView';
 
 const TAB_TITLES: Record<MainTabId, { title: string; subtitle: string }> = {
   overview: { title: '總覽 Overview', subtitle: '全資產淨值、現金流預警與近期日程' },
@@ -26,10 +27,25 @@ const TAB_TITLES: Record<MainTabId, { title: string; subtitle: string }> = {
 };
 
 const MainAppShell: React.FC = () => {
-  const { settings, shortfallAlerts, currentUser } = useVault();
+  const { settings, shortfallAlerts, currentUser, isHydrated } = useVault();
   const [activeTab, setActiveTab] = useState<MainTabId>('overview');
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // 1. 若尚未完成 Local-First 狀態初始化，顯示高質感過渡載入
+  if (!isHydrated) {
+    return (
+      <div className="min-h-screen bg-[#F6F7F9] dark:bg-[#0E1116] flex flex-col justify-center items-center gap-3">
+        <BrandLogo className="w-12 h-12 rounded-2xl shadow-md animate-pulse" />
+        <div className="w-5 h-5 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // 2. 強制登入守衛 (Mandatory Auth Gate)：若尚未登入，強制顯示全螢幕登入與註冊頁面
+  if (!currentUser) {
+    return <AuthGateView />;
+  }
 
   const headerMeta = TAB_TITLES[activeTab];
 

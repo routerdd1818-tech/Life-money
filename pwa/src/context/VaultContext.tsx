@@ -852,6 +852,7 @@ interface VaultContextValue {
   savingsGoals: SavingsGoal[];
   tradePlans: UserTradePlan[];
   settings: VaultSettings;
+  isHydrated: boolean;
   isQuoteSyncing: boolean;
   isCloudSyncing: boolean;
 
@@ -2225,6 +2226,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         currentUser,
         exchangeRateUsdTwd,
         settings,
+        isHydrated,
         isQuoteSyncing,
         isCloudSyncing,
         netWorthSummary,

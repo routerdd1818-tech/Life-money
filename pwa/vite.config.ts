@@ -145,6 +145,45 @@ function freeQuoteApiDevPlugin(): Plugin {
           res.end(JSON.stringify({ status: 500, error: String(err), data: [] }));
         }
       });
+
+      // 支援本地轉發即時財經新聞 (/api/news)
+      server.middlewares.use('/api/news', async (req, res) => {
+        try {
+          const urlObj = new URL(req.url || '', 'http://localhost');
+          const q = urlObj.searchParams.get('q') || '台股';
+          const targetUrl = `https://tw.stock.yahoo.com/rss?s=${encodeURIComponent(q)}`;
+          const upstream = await fetch(targetUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh)' },
+          });
+          const xmlText = await upstream.text();
+          const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+          const items: Array<{ title: string; link: string; pubDate: string; description: string; source: string }> = [];
+          let match: RegExpExecArray | null;
+          while ((match = itemRegex.exec(xmlText)) !== null) {
+            const block = match[1];
+            const titleMatch = /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i.exec(block);
+            const linkMatch = /<link>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i.exec(block);
+            const pubDateMatch = /<pubDate>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/pubDate>/i.exec(block);
+            const descMatch = /<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i.exec(block);
+            const title = titleMatch ? titleMatch[1].trim() : '';
+            if (title) {
+              items.push({
+                title,
+                link: linkMatch ? linkMatch[1].trim() : '',
+                pubDate: pubDateMatch ? pubDateMatch[1].trim() : '',
+                description: descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim() : '',
+                source: 'Yahoo 奇摩股市',
+              });
+            }
+            if (items.length >= 8) break;
+          }
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ status: 200, items }));
+        } catch (err) {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ status: 200, items: [] }));
+        }
+      });
     },
   };
 }

@@ -46,9 +46,10 @@ import {
   calculateTrimmedMedian,
   evaluatePeerValuationAndTradePlan,
 } from '../services/peerValuationEngine';
+import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
 
 type MainViewTab = 'watchlist' | 'screener' | 'sectors';
-type DetailTab = 'kline' | 'valuation' | 'vibe';
+type DetailTab = 'ai_report' | 'kline' | 'valuation' | 'vibe';
 
 interface UnifiedSearchItem {
   id: string;
@@ -211,7 +212,7 @@ export const StockScreenerView: React.FC = () => {
     }
 
     setDetailStock(target);
-    setDetailTab('kline');
+    setDetailTab('ai_report');
 
     // 背景載入 Vibe 分析
     setIsVibeLoading(true);
@@ -767,45 +768,61 @@ export const StockScreenerView: React.FC = () => {
               </button>
             </div>
 
-            {/* 抽屜頁籤列 (K線 / 估值 / Vibe) */}
-            <div className="flex border-b border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#1F2631] text-xs font-semibold">
+            {/* 抽屜頁籤列 (AI報告 / K線 / 估值 / Vibe) */}
+            <div className="flex border-b border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#1F2631] text-xs font-semibold overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => setDetailTab('ai_report')}
+                className={`flex-1 min-w-[90px] py-2.5 text-center transition-all ${
+                  detailTab === 'ai_report'
+                    ? 'bg-white dark:bg-[#161B22] text-[#2563EB] border-b-2 border-[#2563EB] font-bold'
+                    : 'text-[#8B95A1]'
+                }`}
+              >
+                🧠 AI 深度決策
+              </button>
               <button
                 type="button"
                 onClick={() => setDetailTab('kline')}
-                className={`flex-1 py-2.5 text-center transition-all ${
+                className={`flex-1 min-w-[80px] py-2.5 text-center transition-all ${
                   detailTab === 'kline'
                     ? 'bg-white dark:bg-[#161B22] text-[#2563EB] border-b-2 border-[#2563EB] font-bold'
                     : 'text-[#8B95A1]'
                 }`}
               >
-                日 K 線圖
+                📈 日 K 線圖
               </button>
               <button
                 type="button"
                 onClick={() => setDetailTab('valuation')}
-                className={`flex-1 py-2.5 text-center transition-all ${
+                className={`flex-1 min-w-[80px] py-2.5 text-center transition-all ${
                   detailTab === 'valuation'
                     ? 'bg-white dark:bg-[#161B22] text-[#2563EB] border-b-2 border-[#2563EB] font-bold'
                     : 'text-[#8B95A1]'
                 }`}
               >
-                同業估值 & 風控
+                🧭 同業估值
               </button>
               <button
                 type="button"
                 onClick={() => setDetailTab('vibe')}
-                className={`flex-1 py-2.5 text-center transition-all ${
+                className={`flex-1 min-w-[80px] py-2.5 text-center transition-all ${
                   detailTab === 'vibe'
                     ? 'bg-white dark:bg-[#161B22] text-[#2563EB] border-b-2 border-[#2563EB] font-bold'
                     : 'text-[#8B95A1]'
                 }`}
               >
-                AI Vibe 評估
+                ⚡ Vibe 評估
               </button>
             </div>
 
             {/* 抽屜內容主體 (可捲動) */}
             <div className="p-4 overflow-y-auto space-y-4 flex-1">
+              {/* 子分頁 0: 全方位 AI 深度決策報告 */}
+              {detailTab === 'ai_report' && (
+                <AIAnalysisReportView stock={detailStock} allStocks={screenerStocks} />
+              )}
+
               {/* 子分頁 1: 專業 K 線圖 */}
               {detailTab === 'kline' && (
                 <div className="space-y-3">

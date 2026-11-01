@@ -491,7 +491,17 @@ export const PortfolioView: React.FC = () => {
 
           {/* 持倉列表 */}
           <div className="space-y-3">
-            {filteredHoldings.map((h) => {
+            {filteredHoldings.length === 0 ? (
+            <div className="toss-card p-10 text-center space-y-2">
+              <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                目前尚無投資部位
+              </div>
+              <p className="text-xs text-[#8B95A1]">
+                可點選上方「新增標的」手動輸入，或至「選股」分頁搜尋台美股直接轉入持倉
+              </p>
+            </div>
+          ) : (
+            filteredHoldings.map((h) => {
               const costTwd = Math.round(h.units * h.costBasisPerUnit * h.exchangeRateToTwd);
               const pnl = h.unrealizedPnlTwd;
               const pnlPct = h.unrealizedReturnPct;
@@ -549,7 +559,7 @@ export const PortfolioView: React.FC = () => {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
       )}

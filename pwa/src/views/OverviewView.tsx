@@ -124,17 +124,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               {netWorthSummary.netWorth.toLocaleString()}
             </span>
           </div>
-          <div
-            className={`text-xs font-semibold px-2.5 py-1 rounded-lg tabular-nums ${
-              totalUnrealizedPnl >= 0
-                ? 'bg-red-50 dark:bg-red-950/40 text-[#F04452]'
-                : 'bg-emerald-50 dark:bg-emerald-950/40 text-[#059669]'
-            }`}
-          >
-            {totalUnrealizedPnl >= 0 ? '▲' : '▼'} 投資損益{' '}
-            {totalUnrealizedPnl >= 0 ? '+' : ''}
-            {totalUnrealizedPnl.toLocaleString()}
-          </div>
+          {securityHoldings.length > 0 && (
+            <div
+              className={`text-xs font-semibold px-2.5 py-1 rounded-lg tabular-nums ${
+                totalUnrealizedPnl >= 0
+                  ? 'bg-red-50 dark:bg-red-950/40 text-[#F04452]'
+                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-[#059669]'
+              }`}
+            >
+              {totalUnrealizedPnl >= 0 ? '▲' : '▼'} 投資損益{' '}
+              {totalUnrealizedPnl >= 0 ? '+' : ''}
+              {totalUnrealizedPnl.toLocaleString()}
+            </div>
+          )}
         </div>
 
         {/* 資產 vs 負債四格快覽 */}
@@ -337,31 +339,37 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </button>
         </div>
 
-        <div className="space-y-2">
-          {upcomingEvents.map((ev) => (
-            <div
-              key={ev.id}
-              className="flex items-center justify-between p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-base shrink-0">{ev.emoji}</span>
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8] truncate">
-                    {ev.title}
-                  </div>
-                  <div className="text-[11px] text-[#8B95A1] tabular-nums truncate">
-                    {ev.date} {ev.time ? `· ${ev.time}` : ''} {ev.notes ? `· ${ev.notes}` : ''}
+        {upcomingEvents.length === 0 ? (
+          <div className="py-6 text-center text-xs text-[#8B95A1]">
+            近期 14 日內無待繳卡費或待辦行程
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {upcomingEvents.map((ev) => (
+              <div
+                key={ev.id}
+                className="flex items-center justify-between p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-base shrink-0">{ev.emoji}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8] truncate">
+                      {ev.title}
+                    </div>
+                    <div className="text-[11px] text-[#8B95A1] tabular-nums truncate">
+                      {ev.date} {ev.time ? `· ${ev.time}` : ''} {ev.notes ? `· ${ev.notes}` : ''}
+                    </div>
                   </div>
                 </div>
+                {typeof ev.amount === 'number' && ev.amount > 0 && (
+                  <div className="text-xs font-bold tabular-nums text-[#191F28] dark:text-[#F2F4F8] shrink-0 ml-2">
+                    NT$ {ev.amount.toLocaleString()}
+                  </div>
+                )}
               </div>
-              {typeof ev.amount === 'number' && ev.amount > 0 && (
-                <div className="text-xs font-bold tabular-nums text-[#191F28] dark:text-[#F2F4F8] shrink-0 ml-2">
-                  NT$ {ev.amount.toLocaleString()}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* 6. 最新收支動態 */}
@@ -381,42 +389,55 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </button>
         </div>
 
-        <div className="divide-y divide-[#EAEDF2] dark:divide-[#262C36]">
-          {transactions.slice(0, 5).map((tx) => (
-            <div key={tx.id} className="py-2.5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="w-8 h-8 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] flex items-center justify-center text-sm shrink-0">
-                  {tx.categoryEmoji}
-                </span>
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8] truncate">
-                    {tx.categoryName}{' '}
-                    {tx.notes ? (
-                      <span className="font-normal text-[#4E5968] dark:text-[#9BA4B0]">
-                        · {tx.notes}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="text-[11px] text-[#8B95A1] tabular-nums">
-                    {tx.date} · {tx.paymentSourceName}
+        {transactions.length === 0 ? (
+          <div className="py-8 text-center text-xs text-[#8B95A1] space-y-2">
+            <div>尚無收支明細</div>
+            <button
+              type="button"
+              onClick={onOpenQuickEntry}
+              className="px-3.5 py-1.5 rounded-xl bg-[#2563EB] text-white text-xs font-semibold"
+            >
+              記下第一筆
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#EAEDF2] dark:divide-[#262C36]">
+            {transactions.slice(0, 5).map((tx) => (
+              <div key={tx.id} className="py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-8 h-8 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] flex items-center justify-center text-sm shrink-0">
+                    {tx.categoryEmoji}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8] truncate">
+                      {tx.categoryName}{' '}
+                      {tx.notes ? (
+                        <span className="font-normal text-[#4E5968] dark:text-[#9BA4B0]">
+                          · {tx.notes}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="text-[11px] text-[#8B95A1] tabular-nums">
+                      {tx.date} · {tx.paymentSourceName}
+                    </div>
                   </div>
                 </div>
+                <div
+                  className={`text-sm font-bold tabular-nums shrink-0 ml-2 ${
+                    tx.type === 'income'
+                      ? 'text-[#059669]'
+                      : tx.type === 'transfer'
+                        ? 'text-[#4E5968] dark:text-[#9BA4B0]'
+                        : 'text-[#191F28] dark:text-[#F2F4F8]'
+                  }`}
+                >
+                  {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}
+                  NT$ {tx.amount.toLocaleString()}
+                </div>
               </div>
-              <div
-                className={`text-sm font-bold tabular-nums shrink-0 ml-2 ${
-                  tx.type === 'income'
-                    ? 'text-[#059669]'
-                    : tx.type === 'transfer'
-                      ? 'text-[#4E5968] dark:text-[#9BA4B0]'
-                      : 'text-[#191F28] dark:text-[#F2F4F8]'
-                }`}
-              >
-                {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}
-                NT$ {tx.amount.toLocaleString()}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   Clock,
   Compass,
+  Cpu,
+  Database,
   Eye,
   Filter,
   Flame,
@@ -16,6 +18,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Shield,
   SlidersHorizontal,
   Sparkles,
   Star,
@@ -23,6 +26,7 @@ import {
   TrendingUp,
   Wallet,
   X,
+  Zap,
 } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
 import {
@@ -34,6 +38,10 @@ import {
 import { ScreenerFilterCriteria, ScreenerStockItem, StockSectorId, WatchlistType } from '../types';
 import { PeerValuationDashboard } from '../components/PeerValuationDashboard';
 import { formatDataTimestamp, formatMinutesAgo } from '../utils/formatters';
+import {
+  evaluateMultiAgentVibe,
+  MultiAgentVibeAnalysis,
+} from '../services/multiSourceQuantEngine';
 
 type ScreenerSubTab = 'screener' | 'peer_valuation' | 'sectors' | 'watchlist' | 'guide';
 type WatchlistCategory = 'watching' | 'holdings' | 'favorite';
@@ -75,6 +83,22 @@ export const StockScreenerView: React.FC = () => {
   const [wlStopLoss, setWlStopLoss] = useState('');
   const [wlStrategyTag, setWlStrategyTag] = useState('法人雙認養起漲共振策略');
   const [wlNotes, setWlNotes] = useState('');
+
+  // Vibe 多代理 AI 決策面板與 FinMind 穿透檢視
+  const [selectedVibeStock, setSelectedVibeStock] = useState<ScreenerStockItem | null>(null);
+  const [vibeAnalysis, setVibeAnalysis] = useState<MultiAgentVibeAnalysis | null>(null);
+  const [isVibeLoading, setIsVibeLoading] = useState(false);
+
+  const handleOpenVibeModal = async (stock: ScreenerStockItem) => {
+    setSelectedVibeStock(stock);
+    setIsVibeLoading(true);
+    try {
+      const res = await evaluateMultiAgentVibe(stock, settings.finMindToken);
+      setVibeAnalysis(res);
+    } finally {
+      setIsVibeLoading(false);
+    }
+  };
 
   // 全局股票即時搜尋關鍵字
   const [searchQuery, setSearchQuery] = useState('');
@@ -243,6 +267,27 @@ export const StockScreenerView: React.FC = () => {
         </button>
       </div>
 
+      {/* 數據源狀態列 (OpenBB 多源路由架構 + FinMind 官方 API 串接) */}
+      <div className="px-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#8B95A1]">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-semibold text-[#4E5968] dark:text-[#9BA4B0]">數據引擎：</span>
+          <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-[#059669] font-medium border border-emerald-200/60 dark:border-emerald-800/50 flex items-center gap-1">
+            <Database className="w-3 h-3" />
+            <span>FinMind 官方 API {settings.finMindToken ? '(會員 600次/h)' : '(開放版 300次/h)'}</span>
+          </span>
+          <span className="px-2 py-0.5 rounded-md bg-[#F0F2F6] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] font-medium">
+            Yahoo Finance 備援
+          </span>
+          <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] font-medium flex items-center gap-1">
+            <Cpu className="w-3 h-3" />
+            <span>Vibe 多代理決策</span>
+          </span>
+        </div>
+        <span className="text-[10px] hidden sm:inline">
+          三大法人每日買賣超 · 月營收 YoY · 14日 ATR 風控
+        </span>
+      </div>
+
       {/* 全局股票即時搜尋列 (支援代號、中文名稱、題材標籤模糊搜尋) */}
       <section className="toss-card p-3.5 space-y-2.5">
         <div className="relative flex items-center">
@@ -397,6 +442,16 @@ export const StockScreenerView: React.FC = () => {
 
                       {/* 動作按鈕列 */}
                       <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-[#EAEDF2] dark:border-[#262C36]">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenVibeModal(stock)}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          title="開啟 HKUDS Vibe 4 大 AI 代理評估與 FinMind 籌碼穿透"
+                        >
+                          <Zap className="w-3.5 h-3.5 fill-current" />
+                          <span>Vibe 決策</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => {
@@ -990,6 +1045,16 @@ export const StockScreenerView: React.FC = () => {
 
                         <button
                           type="button"
+                          onClick={() => void handleOpenVibeModal(stock)}
+                          className="px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          title="開啟 HKUDS Vibe 4 大 AI 代理評估與 FinMind 籌碼穿透"
+                        >
+                          <Zap className="w-3.5 h-3.5 fill-current" />
+                          <span>Vibe 決策</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => {
                             setSelectedValuationSymbol(stock.symbol);
                             setSubTab('peer_valuation');
@@ -1254,6 +1319,16 @@ export const StockScreenerView: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenVibeModal(st)}
+                            className="px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center gap-0.5 transition-colors"
+                            title="開啟 HKUDS Vibe 4 大 AI 代理評估與 FinMind 籌碼穿透"
+                          >
+                            <Zap className="w-3 h-3 fill-current" />
+                            <span>Vibe</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => {
@@ -1978,6 +2053,232 @@ export const StockScreenerView: React.FC = () => {
               ))}
             </div>
           </section>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* Vibe 多代理 AI 決策面板 & FinMind 官方籌碼穿透彈出視窗 */}
+      {/* ============================================================== */}
+      {selectedVibeStock && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-[#161B22] rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 space-y-4 border border-[#EAEDF2] dark:border-[#262C36] shadow-2xl">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-extrabold text-[#191F28] dark:text-[#F2F4F8]">
+                    {selectedVibeStock.name}
+                  </h3>
+                  <span className="font-mono text-xs text-[#8B95A1] font-semibold">
+                    {selectedVibeStock.symbol}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-[10px] font-bold text-[#2563EB]">
+                    {selectedVibeStock.sectorName}
+                  </span>
+                </div>
+                <div className="text-xs text-[#8B95A1] mt-0.5">
+                  HKUDS Vibe 4 大 AI 代理共振決策與 FinMind 官方籌碼透視
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedVibeStock(null)}
+                className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8B95A1]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {isVibeLoading || !vibeAnalysis ? (
+              <div className="py-12 text-center space-y-3">
+                <RefreshCw className="w-6 h-6 text-[#2563EB] animate-spin mx-auto" />
+                <div className="text-xs font-semibold text-[#4E5968] dark:text-[#9BA4B0]">
+                  正在串接 FinMind 官方 API 讀取三大法人買賣超與月營收，並執行 4 Agent Vibe 決策共振...
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 1. 核心共振打分看板 */}
+                <div className="p-4 rounded-2xl bg-[#F6F7F9] dark:bg-[#1F2631] border border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] text-[#8B95A1] font-medium">多代理共振評分 (Confluence)</div>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="text-3xl font-black text-[#2563EB] tabular-nums">
+                        {vibeAnalysis.confluenceScore}
+                      </span>
+                      <span className="text-xs text-[#8B95A1]">/ 100</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right space-y-1">
+                    <span
+                      className={`inline-block px-3 py-1 rounded-xl text-xs font-extrabold ${
+                        vibeAnalysis.marketVibe === 'BULLISH_CONFLUENCE'
+                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                          : vibeAnalysis.marketVibe === 'MILD_GROWTH'
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                      }`}
+                    >
+                      {vibeAnalysis.vibeLabel}
+                    </span>
+                    <div className="text-[10px] text-[#8B95A1]">
+                      {vibeAnalysis.dataProviderLabel}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-xs text-[#2563EB] leading-relaxed">
+                  {vibeAnalysis.vibeDescription}
+                </div>
+
+                {/* 2. FinMind 官方在地籌碼與月營收精準穿透 */}
+                {vibeAnalysis.finMindData && (
+                  <div className="p-3.5 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                        <Database className="w-3.5 h-3.5" />
+                        <span>FinMind 官方 API 原生量化數據</span>
+                      </div>
+                      <span className="text-[10px] text-[#8B95A1] tabular-nums font-mono">
+                        資料日期：{vibeAnalysis.finMindData.latestDate}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs tabular-nums">
+                      <div className="p-2 rounded-xl bg-white dark:bg-[#161B22] border border-black/5 dark:border-white/5">
+                        <div className="text-[10px] text-[#8B95A1]">外資近5日買賣超</div>
+                        <div
+                          className={`font-bold mt-0.5 ${
+                            vibeAnalysis.finMindData.foreignNetBuyLots5d >= 0
+                              ? 'text-[#F04452]'
+                              : 'text-[#059669]'
+                          }`}
+                        >
+                          {vibeAnalysis.finMindData.foreignNetBuyLots5d >= 0 ? '+' : ''}
+                          {vibeAnalysis.finMindData.foreignNetBuyLots5d.toLocaleString()} 張
+                        </div>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white dark:bg-[#161B22] border border-black/5 dark:border-white/5">
+                        <div className="text-[10px] text-[#8B95A1]">投信近5日買賣超</div>
+                        <div
+                          className={`font-bold mt-0.5 ${
+                            vibeAnalysis.finMindData.trustNetBuyLots5d >= 0
+                              ? 'text-[#F04452]'
+                              : 'text-[#059669]'
+                          }`}
+                        >
+                          {vibeAnalysis.finMindData.trustNetBuyLots5d >= 0 ? '+' : ''}
+                          {vibeAnalysis.finMindData.trustNetBuyLots5d.toLocaleString()} 張
+                        </div>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white dark:bg-[#161B22] border border-black/5 dark:border-white/5">
+                        <div className="text-[10px] text-[#8B95A1]">三大法人合計5日</div>
+                        <div
+                          className={`font-bold mt-0.5 ${
+                            vibeAnalysis.finMindData.totalInstNetBuyLots5d >= 0
+                              ? 'text-[#F04452]'
+                              : 'text-[#059669]'
+                          }`}
+                        >
+                          {vibeAnalysis.finMindData.totalInstNetBuyLots5d >= 0 ? '+' : ''}
+                          {vibeAnalysis.finMindData.totalInstNetBuyLots5d.toLocaleString()} 張
+                        </div>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-white dark:bg-[#161B22] border border-black/5 dark:border-white/5">
+                        <div className="text-[10px] text-[#8B95A1]">
+                          {vibeAnalysis.finMindData.revenueMonth ? `${vibeAnalysis.finMindData.revenueMonth}月營收 YoY` : '最新月營收 YoY'}
+                        </div>
+                        <div
+                          className={`font-bold mt-0.5 ${
+                            (vibeAnalysis.finMindData.revenueYoYPct ?? 0) >= 0
+                              ? 'text-[#F04452]'
+                              : 'text-[#059669]'
+                          }`}
+                        >
+                          {(vibeAnalysis.finMindData.revenueYoYPct ?? 0) >= 0 ? '+' : ''}
+                          {vibeAnalysis.finMindData.revenueYoYPct ?? selectedVibeStock.revenueYoYPct}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. 4 大 Agent 獨立觀點 */}
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                    HKUDS Vibe 4 大專業 AI 代理獨立觀點
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {vibeAnalysis.agents.map((ag) => (
+                      <div
+                        key={ag.agentRole}
+                        className="p-3 rounded-2xl bg-[#F6F7F9] dark:bg-[#1F2631] border border-[#EAEDF2] dark:border-[#262C36] space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#191F28] dark:text-white">
+                            {ag.agentTitle}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              ag.sentiment === 'BULLISH'
+                                ? 'bg-red-50 text-[#F04452]'
+                                : ag.sentiment === 'NEUTRAL'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-emerald-50 text-[#059669]'
+                            }`}
+                          >
+                            {ag.score} 分 · {ag.sentiment}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0] leading-snug">
+                          {ag.keyVerdict}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 底部操作按鈕 */}
+                <div className="flex items-center gap-2 pt-2 border-t border-[#EAEDF2] dark:border-[#262C36]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedValuationSymbol(selectedVibeStock.symbol);
+                      setSubTab('peer_valuation');
+                      setSelectedVibeStock(null);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] text-xs font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    <span>啟動同業相對估值 (TP1~TP3)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleBuyIntoPortfolio({
+                        symbol: selectedVibeStock.symbol,
+                        name: selectedVibeStock.name,
+                        price: vibeAnalysis.finMindData?.latestPrice || selectedVibeStock.price,
+                        market: selectedVibeStock.market,
+                        dividendYieldPct: selectedVibeStock.dividendYieldPct,
+                      });
+                      setSelectedVibeStock(null);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-[#2563EB] text-white text-xs font-bold hover:bg-[#1D4ED8] transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>轉入投資組合持倉</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

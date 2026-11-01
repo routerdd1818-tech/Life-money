@@ -127,6 +127,24 @@ function freeQuoteApiDevPlugin(): Plugin {
           res.end(JSON.stringify({ error: String(err) }));
         }
       });
+
+      // 支援本地轉發 FinMind API (/api/finmind)
+      server.middlewares.use('/api/finmind', async (req, res) => {
+        try {
+          const urlObj = new URL(req.url || '', 'http://localhost');
+          const targetUrl = `https://api.finmindtrade.com/api/v4/data${urlObj.search}`;
+          const upstream = await fetch(targetUrl, {
+            headers: { 'User-Agent': 'FinanceLifePWA/1.0 (DevProxy)' },
+          });
+          const json = await upstream.json();
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(json));
+        } catch (err) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ status: 500, error: String(err), data: [] }));
+        }
+      });
     },
   };
 }

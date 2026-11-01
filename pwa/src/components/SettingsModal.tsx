@@ -467,6 +467,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </div>
               </div>
             </div>
+
+            {/* FinMind 官方台股量化資料庫設定 */}
+            <div className="p-3 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-[#191F28] dark:text-[#F2F4F8] text-xs">
+                    FinMind 官方台股量化 API 串接
+                  </div>
+                  <div className="text-[11px] text-[#8B95A1]">
+                    整合台股日K線、三大法人每日買賣超明細與個股月營收 YoY
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-[#059669]">
+                  {settings.finMindToken ? '會員 600次/h' : '免密 300次/h'}
+                </span>
+              </div>
+
+              <div>
+                <input
+                  type="password"
+                  value={settings.finMindToken || ''}
+                  onChange={(e) => updateSettings({ finMindToken: e.target.value })}
+                  placeholder="FinMind API Token (選填，不填亦可享每小時300次免費額度)"
+                  className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-[#F6F7F9] dark:bg-[#1F2631] text-xs font-mono text-[#191F28] dark:text-[#F2F4F8]"
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-[#8B95A1]">
+                <span>系統預設免 Token 即可開箱即用</span>
+                <a
+                  href="https://finmind.github.io/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#2563EB] hover:underline"
+                >
+                  前往 FinMind 官方取得免費 Token ↗
+                </a>
+              </div>
+            </div>
           </div>
         </div>
 

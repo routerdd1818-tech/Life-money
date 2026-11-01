@@ -371,6 +371,7 @@ export interface VaultSettings {
   autoRefreshOnOpen?: boolean;          // 打開 PWA 或切換回前景時自動更新即時匯率與股價 (預設 true)
   autoRefreshIntervalMinutes?: number;  // 背景定時自動輪詢更新頻率 (分鐘, 0 為關閉手動, 預設 5)
   lastQuoteRefreshedAt?: string;        // 最新行情與匯率更新時間戳記
+  finMindToken?: string;                // FinMind 官方金融 API Token (選填，填入可解鎖每小時 600 次額度)
 }
 
 // ==========================================

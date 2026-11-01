@@ -9,7 +9,7 @@ import {
 export interface SectorMeta {
   id: StockSectorId;
   name: string;
-  emoji: string;
+  emoji?: string;
   description: string;
 }
 
@@ -17,49 +17,41 @@ export const STOCK_SECTORS: SectorMeta[] = [
   {
     id: 'semicon_cowos',
     name: '半導體與 CoWoS 封裝',
-    emoji: '🔬',
     description: '晶圓代工、先進封裝設備、探針卡與再生晶圓測試',
   },
   {
     id: 'ai_server_cooling',
     name: 'AI 伺服器與液冷散熱',
-    emoji: '🖥️',
     description: 'GB200/GB300 伺服器組裝、水冷板、CDU、機殼與電源供應器',
   },
   {
     id: 'ic_design_ip',
     name: 'IC 設計與矽智財 IP',
-    emoji: '🧠',
     description: '手機/邊緣 AI 晶片、ASIC 客製化晶片與高速傳輸介面',
   },
   {
     id: 'cpo_networking',
     name: 'CPO 矽光子與高速網通',
-    emoji: '🌐',
     description: '800G/1.6T 交換器、光收發模組、矽光子封裝與光纖元件',
   },
   {
     id: 'heavy_power',
     name: '重電綠能與電網設備',
-    emoji: '⚡',
     description: '台電強韌電網、北美變壓器外銷、AI 資料中心電力建置',
   },
   {
     id: 'finance_high_div',
     name: '金控銀行與高息價值',
-    emoji: '🏦',
     description: '壽險/銀行雙引擎金控、高殖利率防禦價值股',
   },
   {
     id: 'shipping_trad',
     name: '航運航空與傳產龍頭',
-    emoji: '🚢',
     description: '貨櫃航運、航空客貨運、工業電腦與自動化設備',
   },
   {
     id: 'us_tech_leaders',
     name: '美股 AI 與科技七巨頭',
-    emoji: '🇺🇸',
     description: '全球 AI GPU、雲端 CSP 巨頭與客製化晶片龍頭',
   },
 ];
@@ -75,7 +67,7 @@ export interface QuantStrategyPreset {
 }
 
 /**
- * 7 套 FinLab 風格實戰量化選股策略 (含勝率最高之旗艦策略與經典四面向漏斗)
+ * 12 套主流開源與實戰量化選股策略 (涵蓋勝率最高旗艦、布林壓縮突破、MACD底背離、多頭發散與避險雷達)
  */
 export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
   {
@@ -96,6 +88,72 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
       requireAboveMa60: true,
       minMomentum60dPct: 4,
       maxVolatilityPct: 35,
+      requireInstBuy: true,
+      requireTrustBuy: true,
+    },
+  },
+  {
+    id: 'bollinger_squeeze_breakout',
+    name: '布林通道帶量壓縮突破策略',
+    badge: '壓縮突破',
+    rebalanceCycle: '帶量突破時介入 · 均線出場',
+    summary: '年化波動度極致壓縮至 60 日低檔 + 帶量長紅突破布林上軌 + 月營收正增長',
+    logicDetail:
+      '【GitHub/Backtrader 經典指標突破系統】源自 John Bollinger 波動率擠壓理論：當年化波動度壓縮至低檔（≤ 28%）且股價整理於季線之上，一旦帶量突破布林通道上軌，通常伴隨籌碼沉澱後的新波段噴出行情。',
+    criteria: {
+      sectorId: 'all',
+      minTurnoverYi: 0.8,
+      requirePositiveFcf: true,
+      minRoePct: 12,
+      maxPeRatio: 35,
+      minRevenueYoYPct: 5,
+      requireAboveMa60: true,
+      minMomentum60dPct: 3,
+      maxVolatilityPct: 28,
+      requireInstBuy: true,
+      requireTrustBuy: false,
+    },
+  },
+  {
+    id: 'macd_rsi_divergence',
+    name: 'RSI / MACD 底背離右側確認策略',
+    badge: '動能背離',
+    rebalanceCycle: '指標底背離且黃金交叉時',
+    summary: '估值深度折價或相對合理 + 價格打底但 MACD/RSI 柱狀率先走揚 + 法人開始進駐',
+    logicDetail:
+      '【OpenBB / TradingView 熱門抄底策略】適用於錯殺或景氣落底股：股價雖仍在相對低檔震盪，但 RSI 未再創新低且 MACD 柱狀體出現明顯雙重底背離（Bullish Divergence），三大法人買盤由賣轉買，具備極佳安全邊際與波段賠率。',
+    criteria: {
+      sectorId: 'all',
+      minTurnoverYi: 0.6,
+      requirePositiveFcf: true,
+      minRoePct: 10,
+      maxPeRatio: 22,
+      minRevenueYoYPct: -5,
+      requireAboveMa60: false,
+      minMomentum60dPct: -8,
+      maxVolatilityPct: 35,
+      requireInstBuy: true,
+      requireTrustBuy: false,
+    },
+  },
+  {
+    id: 'ma_ribbon_surge',
+    name: '均線多頭發散暴量起漲策略',
+    badge: '多頭發散',
+    rebalanceCycle: '均線發散主升段持股',
+    summary: '短中長天期均線呈標準多頭發散 + 突破 60MA 季線 + 動能強勁領先大盤',
+    logicDetail:
+      '【FinLab & 加權主升段經典策略】股價站穩 60MA 季線與 240MA 年線，均線呈多頭排列展開（Ribbon Expansion）。搭配 60 日動能 ≥ 8% 且三大法人積極買超卡位，專門捕捉市場主升段最具爆發力的強勢股。',
+    criteria: {
+      sectorId: 'all',
+      minTurnoverYi: 1.2,
+      requirePositiveFcf: true,
+      minRoePct: 14,
+      maxPeRatio: 36,
+      minRevenueYoYPct: 8,
+      requireAboveMa60: true,
+      minMomentum60dPct: 8,
+      maxVolatilityPct: 40,
       requireInstBuy: true,
       requireTrustBuy: true,
     },
@@ -252,6 +310,29 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
       maxVolatilityPct: 24,
       requireInstBuy: false,
       requireTrustBuy: false,
+    },
+  },
+  {
+    id: 'inst_distribution_short',
+    name: '三大法人棄守出貨避險雷達',
+    badge: '空方避險',
+    rebalanceCycle: '跌破關鍵均線時避險或減碼',
+    summary: '三大法人連續調節賣超 + 跌破 60MA 季線 + 動能衰退 (空方警示與避險)',
+    logicDetail:
+      '【避險基金對沖 / 弱勢放空漏斗】專門偵測外資與投信籌碼大出貨、均線下彎蓋頭且 60 日動能由正轉負的弱勢標的。用於主動避開地雷股、及時減碼停損，或在空頭行情時作為反向對沖部位。',
+    criteria: {
+      sectorId: 'all',
+      minTurnoverYi: 0.5,
+      requirePositiveFcf: false,
+      minRoePct: 0,
+      maxPeRatio: 999,
+      minRevenueYoYPct: -99,
+      requireAboveMa60: false,
+      minMomentum60dPct: -99,
+      maxVolatilityPct: 99,
+      requireInstBuy: false,
+      requireTrustBuy: false,
+      isBearishStrategy: true,
     },
   },
 ];
@@ -1132,6 +1213,65 @@ export function evaluateBottomUpFunnel(
     let score = 0;
     const tags: string[] = [];
 
+    // 空方避險策略特殊計分邏輯
+    if (criteria.isBearishStrategy) {
+      if (stock.avgTurnover60dYiTwd >= criteria.minTurnoverYi) {
+        score += 10;
+        tags.push('流動性充足');
+      }
+
+      // 空方 1: 均線弱勢 (跌破 60MA 季線)
+      if (!stock.aboveMa60) {
+        score += 25;
+        tags.push('跌破季線');
+      } else if (!stock.aboveMa240) {
+        score += 15;
+        tags.push('年線下方');
+      }
+
+      // 空方 2: 動能衰退 (60日動能為負或小於 0)
+      if (stock.momentum60dPct <= 0) {
+        score += 20;
+        tags.push(`動能 ${stock.momentum60dPct}%`);
+      } else if (stock.dailyChangePct < 0) {
+        score += 10;
+        tags.push('短期破底');
+      }
+
+      // 空方 3: 三大法人連續賣超
+      if (stock.instNetBuy5dLots < 0) {
+        score += 25;
+        tags.push(`法人賣超 ${Math.abs(stock.instNetBuy5dLots).toLocaleString()}張`);
+      }
+
+      // 空方 4: 投信調節出貨
+      if (stock.trustNetBuy5dLots < 0) {
+        score += 15;
+        tags.push('投信棄守');
+      }
+
+      // 空方 5: 基本面衰退或估值偏高
+      if (stock.revenueYoYPct < 0) {
+        score += 15;
+        tags.push(`營收衰退 ${stock.revenueYoYPct}%`);
+      } else if (stock.peRatio > 25 || stock.peRatio < 0) {
+        score += 10;
+        tags.push('高估值風險');
+      }
+
+      const isFullMatch = !stock.aboveMa60 && stock.instNetBuy5dLots < 0 && stock.momentum60dPct <= 5;
+      const finalMatchScore = isFullMatch ? 100 : Math.min(95, Math.max(30, Math.round(score)));
+
+      return {
+        ...stock,
+        scores: computeStockPillarScores(stock),
+        matchScore: finalMatchScore,
+        matchTags: tags.slice(0, 3),
+        isFullMatch,
+      };
+    }
+
+    // 一般多方量化策略打分
     // 1. 流動性
     if (stock.avgTurnover60dYiTwd >= criteria.minTurnoverYi) {
       score += 15;
@@ -1300,7 +1440,7 @@ export function evaluateBottomUpFunnel(
 export interface SectorFlowSummary {
   sectorId: StockSectorId;
   name: string;
-  emoji: string;
+  emoji?: string;
   description: string;
   stockCount: number;
   avgDailyChangePct: number;
@@ -1338,19 +1478,19 @@ export function calculateSectorFlowStats(universe: ScreenerStockItem[]): SectorF
 
     // 判斷板塊資金輪動象限
     let rotationStage: SectorRotationStage = 'accumulating';
-    let rotationLabel = '🌱 資金轉入蓄勢';
+    let rotationLabel = '資金轉入蓄勢';
     if (avgDailyChangePct >= 1.5 && avgMomentum60dPct >= 14 && netInstFlowLots > 0) {
       rotationStage = 'leading';
-      rotationLabel = '🔥 領漲主流族群';
+      rotationLabel = '領漲主流族群';
     } else if (avgDailyChangePct >= 0.5 && netInstFlowLots > 0) {
       rotationStage = 'accumulating';
-      rotationLabel = '🌱 法人低檔佈局';
+      rotationLabel = '法人低檔佈局';
     } else if (avgMomentum60dPct >= 10 && avgDailyChangePct < 0.5) {
       rotationStage = 'consolidating';
-      rotationLabel = '⚠️ 漲多高檔震盪';
+      rotationLabel = '漲多高檔震盪';
     } else if (avgDailyChangePct < 0 || netInstFlowLots < 0) {
       rotationStage = 'lagging';
-      rotationLabel = '❄️ 資金流出整理';
+      rotationLabel = '資金流出整理';
     }
 
     return {
@@ -1390,7 +1530,7 @@ export const DEFAULT_WATCHLIST: WatchlistStockItem[] = [
     currentPrice: 688.0,
     targetBuyPrice: 665.0,
     stopLossPrice: 615.0,
-    strategyTag: '🚀 投信作帳認養 × 營收創高突破',
+    strategyTag: '投信作帳認養 × 營收創高突破',
     notes: 'ROE 28.4% + 月營收 YoY +31.8% + 水冷板出貨放量，投信近5日連買',
     addedAt: new Date().toISOString(),
   },
@@ -1404,7 +1544,7 @@ export const DEFAULT_WATCHLIST: WatchlistStockItem[] = [
     currentPrice: 312.0,
     targetBuyPrice: 300.0,
     stopLossPrice: 278.0,
-    strategyTag: '🏆 四面向 Bottom-Up 全能複合',
+    strategyTag: '四面向 Bottom-Up 全能複合',
     notes: 'ROE 27.5%、P/E 19.6 合理、月營收年增 38.5%，站穩季線且三大法人買超',
     addedAt: new Date().toISOString(),
   },
@@ -1418,7 +1558,7 @@ export const DEFAULT_WATCHLIST: WatchlistStockItem[] = [
     currentPrice: 1315.0,
     targetBuyPrice: 1280.0,
     stopLossPrice: 1190.0,
-    strategyTag: '💎 彼得林區 GARP 價值成長',
+    strategyTag: '彼得林區 GARP 價值成長',
     notes: 'P/E 19.2 倍搭配營收年增 19.4%、殖利率 4.2%，兼具 AI 成長與高息保護',
     addedAt: new Date().toISOString(),
   },
@@ -1432,7 +1572,7 @@ export const DEFAULT_WATCHLIST: WatchlistStockItem[] = [
     currentPrice: 592.0,
     targetBuyPrice: 570.0,
     stopLossPrice: 525.0,
-    strategyTag: '🌊 資金板塊順勢動能王',
+    strategyTag: '資金板塊順勢動能王',
     notes: '800G 交換器與 AI 加速卡拉貨，單月營收創歷史新高、投信積極認養',
     addedAt: new Date().toISOString(),
   },
@@ -1446,8 +1586,93 @@ export const DEFAULT_WATCHLIST: WatchlistStockItem[] = [
     currentPrice: 37.6,
     targetBuyPrice: 36.5,
     stopLossPrice: 34.0,
-    strategyTag: '🛡️ 低波動高 ROE 護城河',
+    strategyTag: '低波動高 ROE 護城河',
     notes: 'ROE 15.8%、P/E 10.4 倍、年化波動度僅 15.4%，降低投組最大回撤首選',
     addedAt: new Date().toISOString(),
   },
 ];
+
+/**
+ * 5 大實戰行情榜單 (漲幅榜、跌幅榜、三大法人買超榜、三大法人賣超榜、成交金額熱門榜)
+ */
+export type MarketRankingType = 'gainers' | 'losers' | 'inst_buy' | 'inst_sell' | 'turnover';
+
+export interface MarketRankingCategoryMeta {
+  id: MarketRankingType;
+  title: string;
+  badge: string;
+  description: string;
+}
+
+export const MARKET_RANKING_CATEGORIES: MarketRankingCategoryMeta[] = [
+  {
+    id: 'gainers',
+    title: '漲幅榜',
+    badge: '強勢上漲',
+    description: '今日盤中漲幅最強勁、多方動能主導之焦點飆股',
+  },
+  {
+    id: 'losers',
+    title: '跌幅榜',
+    badge: '弱勢修正',
+    description: '今日跌幅較重、遭遇賣壓調節或跌破支撐之標的',
+  },
+  {
+    id: 'inst_buy',
+    title: '三大法人買超榜',
+    badge: '主力鎖碼',
+    description: '外資與投信近 5 日合計大舉買超、籌碼高度集中的核心標的',
+  },
+  {
+    id: 'inst_sell',
+    title: '三大法人賣超榜',
+    badge: '籌碼鬆動',
+    description: '外資與投信近 5 日連續調節出貨、賣壓沈重之避險減碼標的',
+  },
+  {
+    id: 'turnover',
+    title: '成交金額榜',
+    badge: '市場焦點',
+    description: '全市場日均成交金額最大、人氣資金集中的指標權值與強勢股',
+  },
+];
+
+export function getMarketRankings(
+  universe: ScreenerStockItem[],
+  limit = 20
+): Record<MarketRankingType, ScreenerStockItem[]> {
+  const pool = universe && universe.length > 0 ? universe : SCREENER_UNIVERSE;
+
+  // 1. 漲幅榜 (按今日漲幅由高到低)
+  const gainers = [...pool]
+    .sort((a, b) => b.dailyChangePct - a.dailyChangePct)
+    .slice(0, limit);
+
+  // 2. 跌幅榜 (按今日跌幅由低到高，跌幅最深排前)
+  const losers = [...pool]
+    .sort((a, b) => a.dailyChangePct - b.dailyChangePct)
+    .slice(0, limit);
+
+  // 3. 三大法人買超榜 (近 5 日買超張數最多)
+  const instBuy = [...pool]
+    .sort((a, b) => b.instNetBuy5dLots - a.instNetBuy5dLots)
+    .slice(0, limit);
+
+  // 4. 三大法人賣超榜 (近 5 日賣超張數最多，即淨買超數值最小最負)
+  const instSell = [...pool]
+    .sort((a, b) => a.instNetBuy5dLots - b.instNetBuy5dLots)
+    .slice(0, limit);
+
+  // 5. 成交金額榜 (日均成交金額由大到小)
+  const turnover = [...pool]
+    .sort((a, b) => b.avgTurnover60dYiTwd - a.avgTurnover60dYiTwd)
+    .slice(0, limit);
+
+  return {
+    gainers,
+    losers,
+    inst_buy: instBuy,
+    inst_sell: instSell,
+    turnover,
+  };
+}

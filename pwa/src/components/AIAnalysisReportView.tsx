@@ -140,9 +140,9 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
             <p className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8] mt-1.5">
               {report.trendSummary}
             </p>
-            <p className="text-xs text-[#4E5968] dark:text-[#9BA4B0] mt-1">
-              💡 <strong>操作建議：</strong>
-              {report.actionAdvice}
+            <p className="text-xs text-[#4E5968] dark:text-[#9BA4B0] mt-1.5 flex items-start gap-1">
+              <span className="font-bold text-[#191F28] dark:text-[#F2F4F8] shrink-0">操作建議：</span>
+              <span>{report.actionAdvice}</span>
             </p>
           </div>
           <button

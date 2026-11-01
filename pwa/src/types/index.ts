@@ -445,6 +445,7 @@ export interface ScreenerFilterCriteria {
   maxVolatilityPct: number;        // Step 4: 最高年化波動度 (%)
   requireInstBuy: boolean;         // Step 4: 三大法人近 5 日買超 > 0
   requireTrustBuy: boolean;        // Step 4: 投信近 5 日認養買超 > 0
+  isBearishStrategy?: boolean;     // 支援空方避險策略篩選
 }
 
 export type WatchlistType = 'watching' | 'favorite';

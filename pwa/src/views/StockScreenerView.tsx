@@ -1,7 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import {
   Activity,
+  ArrowDownRight,
   ArrowRight,
+  ArrowUpRight,
+  BarChart2,
+  Bookmark,
   CandlestickChart as CandlestickIcon,
   Check,
   ChevronRight,
@@ -13,9 +17,11 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldAlert,
   Sparkles,
   TrendingDown,
   TrendingUp,
+  Users,
   X,
   Zap,
 } from 'lucide-react';
@@ -24,6 +30,9 @@ import { CandlestickChart, TradeLevelLine } from '../components/CandlestickChart
 import {
   calculateSectorFlowStats,
   evaluateBottomUpFunnel,
+  getMarketRankings,
+  MARKET_RANKING_CATEGORIES,
+  MarketRankingType,
   QUANT_STRATEGIES,
 } from '../services/stockScreenerEngine';
 import {
@@ -49,7 +58,7 @@ import {
 } from '../services/industryUniverseService';
 import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
 
-type MainTab = 'watchlist' | 'industries' | 'strategies';
+type MainTab = 'watchlist' | 'rankings' | 'industries' | 'strategies';
 type ModalViewMode = 'kline' | 'ai_fundamental';
 
 interface UnifiedSearchItem {
@@ -78,10 +87,16 @@ export const StockScreenerView: React.FC = () => {
     isQuoteSyncing,
   } = useVault();
 
-  // 1. 主頁籤與全域搜尋 (精簡為 3 大分頁)
+  // 1. 主頁籤與全域搜尋 (自選關注 / 行情排行 / 全市場族群 / 策略選股)
   const [activeTab, setActiveTab] = useState<MainTab>('watchlist');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isResolvingStock, setIsResolvingStock] = useState<string | null>(null);
+
+  // 1.5 行情排行狀態 (漲跌榜 / 買賣超榜 / 成交金額)
+  const [activeRankingType, setActiveRankingType] = useState<MarketRankingType>('gainers');
+  const marketRankings = useMemo(() => {
+    return getMarketRankings(screenerStocks, 20);
+  }, [screenerStocks]);
 
   // 2. 產業族群與次級小分類狀態
   const [selectedGroupId, setSelectedGroupId] = useState<string>('ind_semicon');
@@ -455,8 +470,8 @@ export const StockScreenerView: React.FC = () => {
         )}
       </section>
 
-      {/* 2. 主分頁切換 (精簡收斂為 3 大分類) */}
-      <div className="flex p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-bold">
+      {/* 2. 主分頁切換 (自選關注 / 行情排行 / 全市場族群 / 策略選股) */}
+      <div className="flex p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-bold gap-1">
         <button
           type="button"
           onClick={() => setActiveTab('watchlist')}
@@ -466,8 +481,21 @@ export const StockScreenerView: React.FC = () => {
               : 'text-[#8B95A1] hover:text-[#4E5968]'
           }`}
         >
-          <Eye className="w-3.5 h-3.5" />
-          <span>自選關注 ({watchlist.length})</span>
+          <Bookmark className="w-3.5 h-3.5" />
+          <span>自選 ({watchlist.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('rankings')}
+          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+            activeTab === 'rankings'
+              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
+              : 'text-[#8B95A1] hover:text-[#4E5968]'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          <span>排行</span>
         </button>
 
         <button
@@ -480,7 +508,7 @@ export const StockScreenerView: React.FC = () => {
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>全市場族群 (3,578)</span>
+          <span>族群 (3,578)</span>
         </button>
 
         <button
@@ -493,7 +521,7 @@ export const StockScreenerView: React.FC = () => {
           }`}
         >
           <Compass className="w-3.5 h-3.5" />
-          <span>策略選股</span>
+          <span>策略 ({QUANT_STRATEGIES.length})</span>
         </button>
       </div>
 
@@ -580,7 +608,149 @@ export const StockScreenerView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 分頁 2: 全市場產業族群 (涵蓋 3,578 檔，流暢水平標籤 + 直覺清單) */}
+      {/* 分頁 2: 漲跌榜與買賣超榜 (行情排行折頁) */}
+      {/* ========================================================================= */}
+      {activeTab === 'rankings' && (
+        <section className="space-y-2.5">
+          {/* 次級分類膠囊切換 (漲幅榜 / 跌幅榜 / 法人買超 / 法人賣超 / 成交金額) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+            {MARKET_RANKING_CATEGORIES.map((cat) => {
+              const isActive = activeRankingType === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveRankingType(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-[#191F28] text-white dark:bg-white dark:text-[#191F28] border-transparent font-bold shadow-xs'
+                      : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
+                  }`}
+                >
+                  {cat.id === 'gainers' && <TrendingUp className="w-3.5 h-3.5 text-rose-500" />}
+                  {cat.id === 'losers' && <TrendingDown className="w-3.5 h-3.5 text-emerald-500" />}
+                  {cat.id === 'inst_buy' && <ArrowUpRight className="w-3.5 h-3.5 text-blue-500" />}
+                  {cat.id === 'inst_sell' && <ArrowDownRight className="w-3.5 h-3.5 text-amber-500" />}
+                  {cat.id === 'turnover' && <Activity className="w-3.5 h-3.5 text-indigo-500" />}
+                  <span>{cat.title}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 榜單摘要說明卡 */}
+          {(() => {
+            const currentCat = MARKET_RANKING_CATEGORIES.find((c) => c.id === activeRankingType);
+            const rankingList = marketRankings[activeRankingType] || [];
+
+            return (
+              <>
+                <div className="px-3 py-2 rounded-xl bg-[#F6F7F9] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between text-xs">
+                  <div className="text-[#4E5968] dark:text-[#9BA4B0]">
+                    {currentCat?.description}
+                  </div>
+                  <span className="text-[10px] font-mono text-[#8B95A1] shrink-0 ml-2">
+                    前 {rankingList.length} 檔
+                  </span>
+                </div>
+
+                {/* 排行列表 */}
+                <div className="space-y-1.5">
+                  {rankingList.length === 0 ? (
+                    <div className="toss-card p-6 text-center text-xs text-[#8B95A1]">
+                      目前無符合此排行之標的
+                    </div>
+                  ) : (
+                    rankingList.map((stock, idx) => {
+                      const rank = idx + 1;
+
+                      return (
+                        <div
+                          key={`${stock.symbol}-${rank}`}
+                          onClick={() => void handleOpenStock(stock)}
+                          className="toss-card px-3.5 py-2.5 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* 排行序號 */}
+                            <div
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black tabular-nums shrink-0 ${
+                                rank === 1
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200'
+                                  : rank === 2
+                                    ? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
+                                    : rank === 3
+                                      ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200'
+                                      : 'bg-[#F0F2F6] text-[#8B95A1] dark:bg-[#1F2631]'
+                              }`}
+                            >
+                              {rank}
+                            </div>
+
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[14px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
+                                  {stock.name}
+                                </span>
+                                <span className="text-xs font-mono font-medium text-[#8B95A1]">
+                                  {stock.symbol.replace(/\.(TW|TWO)$/i, '')}
+                                </span>
+                                <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
+                                  {stock.sectorName}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-[#8B95A1]">
+                                {stock.subTheme || `ROE ${stock.roePct}% · PE ${stock.peRatio}x`}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5">
+                            <div className="text-right tabular-nums">
+                              <div className="text-sm font-bold text-[#191F28] dark:text-white">
+                                NT$ {stock.price.toLocaleString()}
+                              </div>
+
+                              {/* 依榜單類型顯示核心指標 */}
+                              {activeRankingType === 'gainers' || activeRankingType === 'losers' ? (
+                                <div
+                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md inline-block ${
+                                    stock.dailyChangePct >= 0
+                                      ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
+                                      : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
+                                  }`}
+                                >
+                                  {stock.dailyChangePct >= 0 ? '+' : ''}
+                                  {stock.dailyChangePct}%
+                                </div>
+                              ) : activeRankingType === 'inst_buy' ? (
+                                <div className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-blue-50 text-[#2563EB] dark:bg-blue-950/40 dark:text-blue-300 inline-block">
+                                  買超 +{stock.instNetBuy5dLots.toLocaleString()}張
+                                </div>
+                              ) : activeRankingType === 'inst_sell' ? (
+                                <div className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-[#059669] dark:bg-emerald-950/40 dark:text-emerald-300 inline-block">
+                                  賣超 {stock.instNetBuy5dLots.toLocaleString()}張
+                                </div>
+                              ) : (
+                                <div className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-gray-100 text-[#4E5968] dark:bg-gray-800 dark:text-[#9BA4B0] inline-block">
+                                  日均 {stock.avgTurnover60dYiTwd} 億
+                                </div>
+                              )}
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB]" />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </section>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 分頁 3: 全市場產業族群 (涵蓋 3,578 檔，流暢水平標籤 + 直覺清單) */}
       {/* ========================================================================= */}
       {activeTab === 'industries' && (
         <section className="space-y-2.5">
@@ -717,33 +887,88 @@ export const StockScreenerView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 分頁 3: 策略選股 (精選量化策略與符合條件名單) */}
+      {/* 分頁 4: 策略選股 (12 套 GitHub 主流量化策略與自適應入選清單) */}
       {/* ========================================================================= */}
       {activeTab === 'strategies' && (
         <section className="space-y-2.5">
-          {/* 策略膠囊選擇器 */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
-            {QUANT_STRATEGIES.map((strat) => (
-              <button
-                key={strat.id}
-                type="button"
-                onClick={() => {
-                  setActiveStrategyId(strat.id);
-                  setCriteria(strat.criteria);
-                }}
-                className={`p-2 rounded-xl text-left border transition-all ${
-                  activeStrategyId === strat.id
-                    ? 'bg-blue-50/60 dark:bg-blue-950/30 border-[#2563EB] text-[#2563EB] font-bold shadow-2xs'
-                    : 'bg-[#F6F7F9] dark:bg-[#1F2631] border-transparent text-[#4E5968] dark:text-[#9BA4B0]'
+          {/* 策略膠囊選擇器 (水平滾動或網格，支援 12 大主流策略) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+            {QUANT_STRATEGIES.map((strat) => {
+              const isActive = activeStrategyId === strat.id;
+              const isBearish = Boolean(strat.criteria.isBearishStrategy);
+
+              return (
+                <button
+                  key={strat.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveStrategyId(strat.id);
+                    setCriteria(strat.criteria);
+                  }}
+                  className={`px-3 py-2 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 ${
+                    isActive
+                      ? isBearish
+                        ? 'bg-emerald-950 text-white dark:bg-emerald-900 border-transparent font-bold shadow-xs'
+                        : 'bg-[#191F28] text-white dark:bg-white dark:text-[#191F28] border-transparent font-bold shadow-xs'
+                      : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
+                  }`}
+                >
+                  {isBearish ? (
+                    <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Compass className="w-3.5 h-3.5 text-blue-500" />
+                  )}
+                  <span>{strat.name}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#8B95A1]'
+                    }`}
+                  >
+                    {strat.badge}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 當前策略量化邏輯與開源出處詳細卡 */}
+          {(() => {
+            const currentStrat =
+              QUANT_STRATEGIES.find((s) => s.id === activeStrategyId) || QUANT_STRATEGIES[0];
+            const isBearish = Boolean(currentStrat.criteria.isBearishStrategy);
+
+            return (
+              <div
+                className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
+                  isBearish
+                    ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40 text-emerald-950 dark:text-emerald-100'
+                    : 'bg-[#F6F7F9] dark:bg-[#161B22] border-[#EAEDF2] dark:border-[#262C36] text-[#191F28] dark:text-[#F2F4F8]'
                 }`}
               >
-                <div className="font-bold text-xs">{strat.name}</div>
-                <div className="text-[10px] text-[#8B95A1] mt-0.5 line-clamp-1">
-                  {strat.summary}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    {isBearish ? (
+                      <ShieldAlert className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Compass className="w-4 h-4 text-[#2563EB]" />
+                    )}
+                    <span>{currentStrat.name}</span>
+                    <span className="px-1.5 py-0.2 rounded bg-blue-100 text-[#2563EB] dark:bg-blue-950/60 dark:text-blue-300 text-[10px]">
+                      {currentStrat.badge}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#8B95A1] font-medium">
+                    調倉週期：{currentStrat.rebalanceCycle}
+                  </span>
                 </div>
-              </button>
-            ))}
-          </div>
+                <p className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0] leading-relaxed">
+                  {currentStrat.logicDetail}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* 入選標的清單 */}
           <div className="space-y-1.5">
@@ -752,65 +977,76 @@ export const StockScreenerView: React.FC = () => {
                 目前無標的完全符合此策略條件
               </div>
             ) : (
-              passedStocks.map((stock) => (
-                <div
-                  key={stock.symbol}
-                  onClick={() => void handleOpenStock(stock)}
-                  className="toss-card px-3.5 py-3 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[15px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
-                        {stock.name}
-                      </span>
-                      <span className="text-xs font-mono font-medium text-[#8B95A1]">
-                        {stock.symbol.replace(/\.(TW|TWO)$/i, '')}
-                      </span>
-                      <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
-                        {stock.sectorName}
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                          stock.isFullMatch
-                            ? 'bg-blue-100 text-[#2563EB] dark:bg-blue-950/60 dark:text-blue-300'
-                            : 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/60 dark:text-emerald-300'
-                        }`}
-                      >
-                        {stock.isFullMatch ? '100% 契合' : `${stock.matchScore}% 契合`}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {stock.matchTags?.map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-1.5 py-0.2 rounded bg-[#F6F7F9] dark:bg-[#1F2631] text-[10px] text-[#4E5968] dark:text-[#9BA4B0] border border-[#EAEDF2] dark:border-[#262C36]"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+              passedStocks.map((stock) => {
+                const currentStrat = QUANT_STRATEGIES.find((s) => s.id === activeStrategyId);
+                const isBearish = Boolean(currentStrat?.criteria.isBearishStrategy);
 
-                  <div className="flex items-center gap-2.5">
-                    <div className="text-right tabular-nums">
-                      <div className="text-base font-bold text-[#191F28] dark:text-white">
-                        NT$ {stock.price.toLocaleString()}
+                return (
+                  <div
+                    key={stock.symbol}
+                    onClick={() => void handleOpenStock(stock)}
+                    className="toss-card px-3.5 py-3 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[15px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
+                          {stock.name}
+                        </span>
+                        <span className="text-xs font-mono font-medium text-[#8B95A1]">
+                          {stock.symbol.replace(/\.(TW|TWO)$/i, '')}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
+                          {stock.sectorName}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                            isBearish
+                              ? 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : stock.isFullMatch
+                                ? 'bg-blue-100 text-[#2563EB] dark:bg-blue-950/60 dark:text-blue-300'
+                                : 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/60 dark:text-emerald-300'
+                          }`}
+                        >
+                          {isBearish
+                            ? `避險 ${stock.matchScore}% 契合`
+                            : stock.isFullMatch
+                              ? '100% 契合'
+                              : `${stock.matchScore}% 契合`}
+                        </span>
                       </div>
-                      <div
-                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md inline-block ${
-                          stock.dailyChangePct >= 0
-                            ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
-                            : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
-                        }`}
-                      >
-                        {stock.dailyChangePct >= 0 ? '+' : ''}
-                        {stock.dailyChangePct}%
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {stock.matchTags?.map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-1.5 py-0.2 rounded bg-[#F6F7F9] dark:bg-[#1F2631] text-[10px] text-[#4E5968] dark:text-[#9BA4B0] border border-[#EAEDF2] dark:border-[#262C36]"
+                          >
+                            {tag}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB]" />
+
+                    <div className="flex items-center gap-2.5">
+                      <div className="text-right tabular-nums">
+                        <div className="text-base font-bold text-[#191F28] dark:text-white">
+                          NT$ {stock.price.toLocaleString()}
+                        </div>
+                        <div
+                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md inline-block ${
+                            stock.dailyChangePct >= 0
+                              ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
+                              : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
+                          }`}
+                        >
+                          {stock.dailyChangePct >= 0 ? '+' : ''}
+                          {stock.dailyChangePct}%
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB]" />
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
@@ -874,7 +1110,7 @@ export const StockScreenerView: React.FC = () => {
                 }`}
               >
                 <CandlestickIcon className="w-3.5 h-3.5" />
-                <span>📈 日 K 線走勢與點位</span>
+                <span>日 K 線走勢與點位</span>
               </button>
 
               <button
@@ -887,7 +1123,7 @@ export const StockScreenerView: React.FC = () => {
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>🧠 AI 決策與基本面</span>
+                <span>AI 決策與基本面</span>
               </button>
             </div>
 
@@ -983,7 +1219,7 @@ export const StockScreenerView: React.FC = () => {
                     : 'bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#191F28] dark:text-white'
                 }`}
               >
-                <Eye className="w-4 h-4" />
+                <Bookmark className="w-4 h-4" />
                 <span>{isInWatchlist(detailStock.symbol) ? '已在自選' : '+ 自選'}</span>
               </button>
 

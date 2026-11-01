@@ -321,13 +321,182 @@ export function getAllConceptGroups(): IndustryGroupMeta[] {
   });
 }
 
+export interface SubCategoryMeta {
+  id: string;
+  name: string;
+  badge?: string;
+}
+
+export interface SubCategoryDefinition {
+  id: string;
+  name: string;
+  matcher: (stock: TaiwanStockBasicInfo) => boolean;
+}
+
+export const GROUP_SUBCATEGORIES: Record<string, SubCategoryDefinition[]> = {
+  ind_semicon: [
+    {
+      id: 'sub_ic_design',
+      name: 'IC 設計',
+      matcher: (s) =>
+        ['2454', '3034', '2379', '3661', '3443', '3035', '3529', '6526', '6732', '8016', '6415', '3227', '4968', '6237', '5471', '3141', '6462', '4961', '3545', '8054', '6531', '3014'].includes(s.id) ||
+        s.name.includes('科') || s.name.includes('芯') || s.name.includes('智') || s.name.includes('原') || s.name.includes('創'),
+    },
+    {
+      id: 'sub_foundry',
+      name: '晶圓代工',
+      matcher: (s) => ['2330', '2303', '5347', '6770', '3707', '2337', '2344'].includes(s.id),
+    },
+    {
+      id: 'sub_packaging',
+      name: '封裝測試',
+      matcher: (s) =>
+        ['3711', '2449', '6239', '8150', '3264', '6257', '6515', '6683', '8110', '6525', '3374'].includes(s.id) ||
+        s.name.includes('封') || s.name.includes('測') || s.name.includes('詮'),
+    },
+    {
+      id: 'sub_equipment',
+      name: '設備與材料',
+      matcher: (s) =>
+        ['3131', '3583', '6187', '6640', '3680', '8028', '1560', '5483', '6488', '5387', '3413', '8299', '2404', '3555'].includes(s.id) ||
+        s.name.includes('設備') || s.name.includes('材料') || s.name.includes('晶'),
+    },
+  ],
+  ind_computer: [
+    {
+      id: 'sub_ai_servers',
+      name: 'AI 伺服器/組裝',
+      matcher: (s) => ['2382', '2317', '3231', '6669', '2356', '2376', '2357', '2377', '3706', '2301', '2324'].includes(s.id),
+    },
+    {
+      id: 'sub_chassis',
+      name: '機殼與散熱電源',
+      matcher: (s) => ['3013', '8210', '6117', '2308', '3017', '2421', '3005', '6125'].includes(s.id),
+    },
+    {
+      id: 'sub_ipc',
+      name: '工業電腦 IPC',
+      matcher: (s) => ['2395', '6414', '6245', '8050', '3088', '5258', '6579', '3594', '4916'].includes(s.id) || s.name.includes('研') || s.name.includes('樺'),
+    },
+  ],
+  ind_components: [
+    {
+      id: 'sub_cooling',
+      name: '散熱元件',
+      matcher: (s) => ['3017', '3324', '2421', '8996', '3653', '6230', '3013', '2486'].includes(s.id),
+    },
+    {
+      id: 'sub_pcb',
+      name: 'PCB 與載板',
+      matcher: (s) => ['3037', '8046', '3189', '2368', '2383', '6274', '6213', '5469', '8155', '4958', '3044'].includes(s.id) || s.name.includes('電') || s.name.includes('光'),
+    },
+    {
+      id: 'sub_passive',
+      name: '被動元件',
+      matcher: (s) => ['2327', '2492', '6173', '2375', '2456', '2478', '6207', '3026'].includes(s.id),
+    },
+    {
+      id: 'sub_connectors',
+      name: '連接器與線纜',
+      matcher: (s) => ['3533', '3665', '3023', '6290', '3689', '6197', '3217'].includes(s.id),
+    },
+  ],
+  ind_comm: [
+    {
+      id: 'sub_cpo',
+      name: 'CPO 矽光子',
+      matcher: (s) => ['4979', '3363', '3163', '4977', '6442', '6451', '3450', '2345'].includes(s.id),
+    },
+    {
+      id: 'sub_networking',
+      name: '網通設備',
+      matcher: (s) => ['2345', '5388', '6285', '3596', '2332', '3704', '2444'].includes(s.id),
+    },
+    {
+      id: 'sub_telecom',
+      name: '電信與衛星',
+      matcher: (s) => ['2412', '3045', '4904', '3491', '2312', '4916'].includes(s.id),
+    },
+  ],
+  ind_machinery: [
+    {
+      id: 'sub_heavy_electric',
+      name: '重電綠能電網',
+      matcher: (s) => ['1519', '1503', '1513', '1514', '1504', '1516', '1609', '1605'].includes(s.id),
+    },
+    {
+      id: 'sub_robotics',
+      name: '機器人與工具機',
+      matcher: (s) => ['4526', '2049', '4576', '1597', '2359', '6188', '8374', '2365', '4540', '4566', '1582'].includes(s.id),
+    },
+  ],
+  ind_biomed: [
+    {
+      id: 'sub_new_drug',
+      name: '新藥研發/CDMO',
+      matcher: (s) => ['6446', '6550', '4743', '6472', '1795', '4162', '6589', '6712'].includes(s.id),
+    },
+    {
+      id: 'sub_med_devices',
+      name: '醫療器材',
+      matcher: (s) => ['4104', '4736', '1789', '4105', '6491', '1786', '4107'].includes(s.id),
+    },
+  ],
+  ind_finance: [
+    {
+      id: 'sub_fin_holding',
+      name: '金控集團',
+      matcher: (s) => ['2881', '2882', '2886', '2884', '2891', '2892', '2880', '2887', '2883', '2885', '2890', '5880'].includes(s.id) || s.name.includes('金控') || s.name.includes('金'),
+    },
+    {
+      id: 'sub_banking_securities',
+      name: '銀行與證券',
+      matcher: (s) => ['2801', '2834', '2855', '6005', '2838', '2812', '2845', '2851', '5876'].includes(s.id) || s.name.includes('銀') || s.name.includes('證'),
+    },
+  ],
+  ind_shipping: [
+    {
+      id: 'sub_marine',
+      name: '貨櫃散裝',
+      matcher: (s) => ['2603', '2609', '2615', '2606', '2605', '2637', '2612', '2617'].includes(s.id),
+    },
+    {
+      id: 'sub_aviation',
+      name: '航空客貨',
+      matcher: (s) => ['2618', '2610', '2645', '2646'].includes(s.id),
+    },
+  ],
+};
+
 /**
- * 根據群組 ID 取得該族群內的所有標的（支援搜尋過濾）
+ * 取得指定群組支援的次級小分類清單 (包含全部、上市、上櫃與專屬業務領域)
  */
-export function getStocksInGroup(
+export function getSubCategoriesForGroup(groupId: string): SubCategoryMeta[] {
+  const baseSubCategories: SubCategoryMeta[] = [
+    { id: 'all', name: '全部' },
+    { id: 'twse', name: '上市' },
+    { id: 'tpex', name: '上櫃' },
+  ];
+
+  const specific = GROUP_SUBCATEGORIES[groupId];
+  if (specific && specific.length > 0) {
+    return [
+      ...baseSubCategories,
+      ...specific.map((s) => ({ id: s.id, name: s.name })),
+    ];
+  }
+
+  return baseSubCategories;
+}
+
+/**
+ * 根據群組 ID 與次級小分類 ID 取得該族群內的所有標的（支援搜尋過濾）
+ */
+export function getFilteredStocksInGroup(
   groupId: string,
+  subCategoryId = 'all',
   searchKeyword = '',
-  limit = 80
+  limit = 120
 ): TaiwanStockBasicInfo[] {
   let list: TaiwanStockBasicInfo[] = [];
 
@@ -340,6 +509,20 @@ export function getStocksInGroup(
     list = groupedOfficialStocks[groupId] || [];
   }
 
+  // 1. 次級小分類過濾
+  if (subCategoryId === 'twse') {
+    list = list.filter((s) => s.market === 'TWSE');
+  } else if (subCategoryId === 'tpex') {
+    list = list.filter((s) => s.market === 'TPEx');
+  } else if (subCategoryId !== 'all') {
+    const specificDefs = GROUP_SUBCATEGORIES[groupId];
+    const def = specificDefs?.find((d) => d.id === subCategoryId);
+    if (def) {
+      list = list.filter((s) => def.matcher(s));
+    }
+  }
+
+  // 2. 關鍵字搜尋過濾
   const q = searchKeyword.trim().toLowerCase();
   if (!q) {
     return list.slice(0, limit);
@@ -353,4 +536,15 @@ export function getStocksInGroup(
         s.sector.toLowerCase().includes(q)
     )
     .slice(0, limit);
+}
+
+/**
+ * 根據群組 ID 取得該族群內的所有標的（支援搜尋過濾）
+ */
+export function getStocksInGroup(
+  groupId: string,
+  searchKeyword = '',
+  limit = 80
+): TaiwanStockBasicInfo[] {
+  return getFilteredStocksInGroup(groupId, 'all', searchKeyword, limit);
 }

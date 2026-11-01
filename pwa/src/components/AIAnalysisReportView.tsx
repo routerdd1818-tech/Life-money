@@ -108,9 +108,11 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
             ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50'
             : trendBias === 'MILD_BULL'
               ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50'
-              : trendBias === 'BEARISH'
-                ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50'
-                : 'bg-gray-50 dark:bg-[#1F2631] border-[#EAEDF2] dark:border-[#262C36]'
+              : trendBias === 'STRONG_BEAR'
+                ? 'bg-emerald-100/60 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-800'
+                : trendBias === 'WEAK_BEAR' || trendBias === 'BEARISH'
+                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50'
+                  : 'bg-gray-50 dark:bg-[#1F2631] border-[#EAEDF2] dark:border-[#262C36]'
         }`}
       >
         <div className="flex items-start justify-between gap-2">
@@ -122,9 +124,11 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
                     ? 'bg-[#F04452] text-white'
                     : trendBias === 'MILD_BULL'
                       ? 'bg-[#2563EB] text-white'
-                      : trendBias === 'BEARISH'
-                        ? 'bg-[#059669] text-white'
-                        : 'bg-gray-500 text-white'
+                      : trendBias === 'STRONG_BEAR'
+                        ? 'bg-[#047857] text-white shadow-sm'
+                        : trendBias === 'WEAK_BEAR' || trendBias === 'BEARISH'
+                          ? 'bg-[#059669] text-white'
+                          : 'bg-gray-500 text-white'
                 }`}
               >
                 {report.trendLabel}
@@ -227,64 +231,126 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 tabular-nums">
-          {/* SL */}
-          <div className="p-3 rounded-xl bg-red-50/60 dark:bg-red-950/20 border border-red-200/60 space-y-1">
-            <div className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center justify-between">
-              <span>SL 停損點</span>
-              <span>-2 ATR</span>
+        {/* 判斷多空架構呈現不同點位意義 */}
+        {trendBias === 'STRONG_BEAR' || trendBias === 'WEAK_BEAR' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 tabular-nums">
+            {/* 上方反壓防線 */}
+            <div className="p-3 rounded-xl bg-red-50/60 dark:bg-red-950/20 border border-red-200/60 space-y-1">
+              <div className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center justify-between">
+                <span>SL 反壓防線</span>
+                <span>+1.5 ATR</span>
+              </div>
+              <div className="text-base font-black text-[#F04452]">NT$ {ladder.slPrice}</div>
+              <div className="text-[10px] text-[#8B95A1]">+{ladder.slDownsidePct}% 反彈減碼點</div>
             </div>
-            <div className="text-base font-black text-[#F04452]">NT$ {ladder.slPrice}</div>
-            <div className="text-[10px] text-[#8B95A1]">{ladder.slDownsidePct}% 防守底線</div>
-          </div>
 
-          {/* 現價 */}
-          <div className="p-3 rounded-xl bg-gray-100/80 dark:bg-[#1F2631] border border-gray-200 dark:border-gray-700 space-y-1">
-            <div className="text-[10px] text-[#4E5968] dark:text-[#9BA4B0] font-bold">
-              進場參考現價
+            {/* 現價 */}
+            <div className="p-3 rounded-xl bg-gray-100/80 dark:bg-[#1F2631] border border-gray-200 dark:border-gray-700 space-y-1">
+              <div className="text-[10px] text-[#4E5968] dark:text-[#9BA4B0] font-bold">
+                當前市價
+              </div>
+              <div className="text-base font-black text-[#191F28] dark:text-white">
+                NT$ {ladder.currentPrice}
+              </div>
+              <div className="text-[10px] text-[#059669] font-medium">空方主導 · 做多不宜</div>
             </div>
-            <div className="text-base font-black text-[#191F28] dark:text-white">
-              NT$ {ladder.currentPrice}
-            </div>
-            <div className="text-[10px] text-[#8B95A1]">1R 風險 = {ladder.atr14 * 2} 元</div>
-          </div>
 
-          {/* TP1 */}
-          <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 space-y-1">
-            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-between">
-              <span>TP1 保本止盈</span>
-              <span>折價收斂50%</span>
+            {/* TP1 下檔支撐測試點 */}
+            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 space-y-1">
+              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-between">
+                <span>TP1 支撐測試</span>
+                <span>-1 ATR</span>
+              </div>
+              <div className="text-base font-black text-[#059669]">NT$ {ladder.tp1Price}</div>
+              <div className="text-[10px] text-emerald-600 font-medium">
+                {ladder.tp1UpsidePct}% 初步支撐
+              </div>
             </div>
-            <div className="text-base font-black text-[#059669]">NT$ {ladder.tp1Price}</div>
-            <div className="text-[10px] text-emerald-600 font-medium">
-              +{ladder.tp1UpsidePct}% (減碼35%)
-            </div>
-          </div>
 
-          {/* TP2 */}
-          <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 space-y-1">
-            <div className="text-[10px] text-[#2563EB] font-bold flex items-center justify-between">
-              <span>TP2 同業合理價</span>
-              <span>核心目標</span>
+            {/* TP2 空方波段滿足點 */}
+            <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 space-y-1">
+              <div className="text-[10px] text-[#2563EB] font-bold flex items-center justify-between">
+                <span>TP2 下檔滿足</span>
+                <span>-2.5 ATR</span>
+              </div>
+              <div className="text-base font-black text-[#2563EB]">NT$ {ladder.tp2Price}</div>
+              <div className="text-[10px] text-[#2563EB] font-medium">
+                {ladder.tp2UpsidePct}% 波段目標
+              </div>
             </div>
-            <div className="text-base font-black text-[#2563EB]">NT$ {ladder.tp2Price}</div>
-            <div className="text-[10px] text-[#2563EB] font-medium">
-              +{ladder.tp2UpsidePct}% 潛在空間
-            </div>
-          </div>
 
-          {/* TP3 */}
-          <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/60 space-y-1">
-            <div className="text-[10px] text-purple-600 dark:text-purple-400 font-bold flex items-center justify-between">
-              <span>TP3 龍頭極值</span>
-              <span>移動停利</span>
-            </div>
-            <div className="text-base font-black text-[#8B5CF6]">NT$ {ladder.tp3Price}</div>
-            <div className="text-[10px] text-purple-600 font-medium">
-              +{ladder.tp3UpsidePct}% 破月線清倉
+            {/* TP3 極端破底目標 */}
+            <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/60 space-y-1">
+              <div className="text-[10px] text-purple-600 dark:text-purple-400 font-bold flex items-center justify-between">
+                <span>TP3 破底極值</span>
+                <span>-4 ATR</span>
+              </div>
+              <div className="text-base font-black text-[#8B5CF6]">NT$ {ladder.tp3Price}</div>
+              <div className="text-[10px] text-purple-600 font-medium">
+                {ladder.tp3UpsidePct}% 極端停損位
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 tabular-nums">
+            {/* SL */}
+            <div className="p-3 rounded-xl bg-red-50/60 dark:bg-red-950/20 border border-red-200/60 space-y-1">
+              <div className="text-[10px] text-red-600 dark:text-red-400 font-bold flex items-center justify-between">
+                <span>SL 停損點</span>
+                <span>-2 ATR</span>
+              </div>
+              <div className="text-base font-black text-[#F04452]">NT$ {ladder.slPrice}</div>
+              <div className="text-[10px] text-[#8B95A1]">{ladder.slDownsidePct}% 防守底線</div>
+            </div>
+
+            {/* 現價 */}
+            <div className="p-3 rounded-xl bg-gray-100/80 dark:bg-[#1F2631] border border-gray-200 dark:border-gray-700 space-y-1">
+              <div className="text-[10px] text-[#4E5968] dark:text-[#9BA4B0] font-bold">
+                進場參考現價
+              </div>
+              <div className="text-base font-black text-[#191F28] dark:text-white">
+                NT$ {ladder.currentPrice}
+              </div>
+              <div className="text-[10px] text-[#8B95A1]">1R 風險 = {ladder.atr14 * 2} 元</div>
+            </div>
+
+            {/* TP1 */}
+            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 space-y-1">
+              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-between">
+                <span>TP1 保本止盈</span>
+                <span>折價收斂50%</span>
+              </div>
+              <div className="text-base font-black text-[#059669]">NT$ {ladder.tp1Price}</div>
+              <div className="text-[10px] text-emerald-600 font-medium">
+                +{ladder.tp1UpsidePct}% (減碼35%)
+              </div>
+            </div>
+
+            {/* TP2 */}
+            <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 space-y-1">
+              <div className="text-[10px] text-[#2563EB] font-bold flex items-center justify-between">
+                <span>TP2 同業合理價</span>
+                <span>核心目標</span>
+              </div>
+              <div className="text-base font-black text-[#2563EB]">NT$ {ladder.tp2Price}</div>
+              <div className="text-[10px] text-[#2563EB] font-medium">
+                +{ladder.tp2UpsidePct}% 潛在空間
+              </div>
+            </div>
+
+            {/* TP3 */}
+            <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/60 space-y-1">
+              <div className="text-[10px] text-purple-600 dark:text-purple-400 font-bold flex items-center justify-between">
+                <span>TP3 龍頭極值</span>
+                <span>移動停利</span>
+              </div>
+              <div className="text-base font-black text-[#8B5CF6]">NT$ {ladder.tp3Price}</div>
+              <div className="text-[10px] text-purple-600 font-medium">
+                +{ladder.tp3UpsidePct}% 破月線清倉
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3. 價格合理性與同業估值 (Valuation Verdict) */}

@@ -45,6 +45,11 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       stockName = '台積電',
       price = 1000,
       changePct = 0,
+      trendBias = 'CONSOLIDATION',
+      trendScore = 50,
+      trendLabel = '區間震盪整理',
+      trendSummary = '',
+      actionAdvice = '',
       ladder = {},
       valuation = {},
       fundamental = {},
@@ -78,7 +83,9 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       ? peers.map((p: any) => `${p.name}(${p.symbol}): PE ${p.pe || 'N/A'}x, ROE ${p.roePct || 0}%, 營收YoY ${p.revYoYPct || 0}%`).join('；')
       : '同業競品族群估值維持常態中位數。';
 
-    const promptText = `你現在是台灣頂尖證券自營部或避險基金的「首席量化操盤手」，專精結合基本面相對估值、籌碼流向與 ATR 波動率進行紀律交易。
+    const isBearishTrend = trendBias === 'STRONG_BEAR' || trendBias === 'WEAK_BEAR';
+
+    const promptText = `你現在是台灣頂尖證券自營部或避險基金的「首席量化操盤手」，專精結合均線位階、法人籌碼、基本面相對估值與 ATR 波動率進行紀律交易。
 請針對以下個股量化數據與市場情報，進行深度、直率、無廢話的「實戰操盤決策分析」：
 
 【分析標的】
@@ -87,14 +94,26 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
 - ATR(14) 波動度：${ladder.atr14 || 'N/A'} 元
 - 風險報酬比 (Reward-to-Risk)：${ladder.riskRewardRatio ? ladder.riskRewardRatio + ' : 1' : 'N/A'}
 
-【三階段關鍵出場價位】
-- 停損防守價 (SL, 2×ATR)：NT$ ${ladder.slPrice || 'N/A'}
+【量化多空判定與技術籌碼位階】
+- 量化多空定調：${trendLabel} (多空力道指數: ${trendScore} / 100，型態評級: ${trendBias})
+- 趨勢特徵診斷：${trendSummary || '均線與籌碼進入關鍵抉擇期'}
+- 量化操作指引：${actionAdvice || '依照點位紀律操作'}
+
+【交易關鍵價位】
+${
+  isBearishTrend
+    ? `- 上方反壓防線 (SL, 反彈減碼點)：NT$ ${ladder.slPrice || 'N/A'}
+- 下檔初步支撐測試 (TP1)：NT$ ${ladder.tp1Price || 'N/A'}
+- 空方波段滿足價 (TP2)：NT$ ${ladder.tp2Price || 'N/A'}
+- 極端破底目標價 (TP3)：NT$ ${ladder.tp3Price || 'N/A'}`
+    : `- 停損防守價 (SL, 2×ATR)：NT$ ${ladder.slPrice || 'N/A'}
 - 保本止盈價 1 (TP1, 折價收斂50%減碼保本)：NT$ ${ladder.tp1Price || 'N/A'}
 - 基本面目標價 (TP2, 同業中位數合理價)：NT$ ${ladder.tp2Price || 'N/A'}
-- 趨勢延伸價 3 (TP3, 龍頭估值溢價/移動停利)：NT$ ${ladder.tp3Price || 'N/A'}
+- 趨勢延伸價 3 (TP3, 龍頭估值溢價/移動停利)：NT$ ${ladder.tp3Price || 'N/A'}`
+}
 
 【相對估值與同業現況】
-- 估值狀態：${valuation.status || '相對合理'} (相對於同業中位數折溢價 ${valuation.discountPremiumPct || 0}%)
+- 估值狀態：${valuation.statusLabel || valuation.status || '相對合理'} (相對於同業中位數折溢價 ${valuation.discountPremiumPct || 0}%)
 - 同業中位數 PE：${valuation.peerMedianPe || 'N/A'} 倍 | 估算公允價值：NT$ ${valuation.fairValueEstimate || 'N/A'}
 - 同業競品現況：${peersSummary}
 
@@ -111,8 +130,8 @@ ${newsSummary}
 ---
 【輸出要求】
 請嚴格遵守以下四個段落架構輸出，語氣必須像資深操盤手在作晨會晨報，結論先行、段落清晰、講真話：
-1. 【多空定調與核心結論】：明確給出「偏多攻擊 / 區間震盪 / 破底避險」的定調，並附上一句話作戰核心策略。
-2. 【操盤手深度思路與攻防節奏】：分析主力當前籌碼心態、SL 防守防線與 TP1 減碼保本、TP2 獲利了結的實戰執行步驟。
+1. 【多空定調與核心結論】：明確依據量化多空判定（${trendLabel}，力道指數 ${trendScore}/100）。若為「弱勢偏空」或「空頭破線」，必須嚴正定調為防守/避險/出清，嚴禁盲目喊多或粉飾太平！
+2. 【操盤手深度思路與攻防節奏】：分析主力與法人買賣心態。若偏多，分析 SL 防守與 TP1/TP2 攻防；若偏空或破線，分析上方反壓解套點、下檔支撐破底危機與持股減碼時機。
 3. 【同業折溢價與基本面質化觀點】：剖析當前相對於同業是遭錯殺低估還是估值過高，以及基本面護城河是否支撐股價。
 4. 【黑天鵝風險與避坑叮嚀】：結合近期新聞與產業景氣，點出最該防備的 1~2 個致命破線或產業風險。
 

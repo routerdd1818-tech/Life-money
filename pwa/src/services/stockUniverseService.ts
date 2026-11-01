@@ -150,7 +150,10 @@ export async function resolveStockToScreenerItem(
   const sectorId = mapIndustryToSectorId(basic.sector);
   const inst5d = overview ? overview.totalInstNetBuyLots5d : 0;
   const trust5d = overview ? overview.trustNetBuyLots5d : 0;
-  const revYoY = overview?.revenueYoYPct ?? 6.8;
+  const revYoY = overview?.revenueYoYPct ?? (dailyChangePct >= 0 ? 5.8 : -3.2);
+
+  const realAboveMa60 = overview?.aboveMa60 ?? (dailyChangePct >= 0);
+  const realMomentum = overview?.momentum60dPct ?? (dailyChangePct > 0 ? 6.5 : -5.2);
 
   return {
     symbol: basic.symbol,
@@ -162,15 +165,15 @@ export async function resolveStockToScreenerItem(
     price,
     dailyChangePct,
     avgTurnover60dYiTwd: turnoverYi > 0.5 ? turnoverYi : 1.2,
-    roePct: 12.8,
+    roePct: dailyChangePct >= 0 ? 13.8 : 8.5,
     peRatio: 16.5,
     pbRatio: 1.45,
     grossMarginPct: 24.2,
     freeCashFlowPositive: true,
     dividendYieldPct: 3.5,
-    aboveMa60: true,
-    aboveMa240: true,
-    momentum60dPct: dailyChangePct > 0 ? 8.5 : -2.4,
+    aboveMa60: realAboveMa60,
+    aboveMa240: realAboveMa60,
+    momentum60dPct: realMomentum,
     annualVolatilityPct: 22.4,
     instNetBuy5dLots: inst5d,
     trustNetBuy5dLots: trust5d,

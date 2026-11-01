@@ -42,8 +42,10 @@ import {
 import {
   getAllIndustryGroups,
   getAllConceptGroups,
-  getStocksInGroup,
+  getFilteredStocksInGroup,
+  getSubCategoriesForGroup,
   IndustryGroupMeta,
+  SubCategoryMeta,
 } from '../services/industryUniverseService';
 import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
 
@@ -81,8 +83,9 @@ export const StockScreenerView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isResolvingStock, setIsResolvingStock] = useState<string | null>(null);
 
-  // 2. 產業族群分類狀態
+  // 2. 產業族群與次級小分類狀態
   const [selectedGroupId, setSelectedGroupId] = useState<string>('ind_semicon');
+  const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<string>('all');
   const [groupSearchQuery, setGroupSearchQuery] = useState<string>('');
 
   // 3. 量化策略狀態
@@ -100,10 +103,15 @@ export const StockScreenerView: React.FC = () => {
     return [...concepts, ...officials];
   }, []);
 
-  // 6. 當前族群內標的 (支援搜尋與快取)
+  // 6. 當前族群支援之次級小分類
+  const subCategories = useMemo<SubCategoryMeta[]>(() => {
+    return getSubCategoriesForGroup(selectedGroupId);
+  }, [selectedGroupId]);
+
+  // 6.5 當前族群與次級分類篩選後標的 (支援搜尋與快取)
   const groupStocks = useMemo<TaiwanStockBasicInfo[]>(() => {
-    return getStocksInGroup(selectedGroupId, groupSearchQuery, 120);
-  }, [selectedGroupId, groupSearchQuery]);
+    return getFilteredStocksInGroup(selectedGroupId, selectedSubCategoryId, groupSearchQuery, 120);
+  }, [selectedGroupId, selectedSubCategoryId, groupSearchQuery]);
 
   // 7. 全市場搜尋相符標的 (結合在庫標的與全台股 3,578 檔字典)
   const searchResults = useMemo<UnifiedSearchItem[]>(() => {
@@ -214,9 +222,9 @@ export const StockScreenerView: React.FC = () => {
             grossMarginPct: 22.0,
             freeCashFlowPositive: true,
             dividendYieldPct: 3.5,
-            aboveMa60: true,
-            aboveMa240: true,
-            momentum60dPct: 4.5,
+            aboveMa60: false,
+            aboveMa240: false,
+            momentum60dPct: 0,
             annualVolatilityPct: 22.0,
             instNetBuy5dLots: 0,
             trustNetBuy5dLots: 0,
@@ -586,6 +594,7 @@ export const StockScreenerView: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setSelectedGroupId(grp.id);
+                    setSelectedSubCategoryId('all');
                     setGroupSearchQuery('');
                   }}
                   className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 ${
@@ -604,6 +613,27 @@ export const StockScreenerView: React.FC = () => {
                   >
                     {grp.stockCount}
                   </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 次級小分類快速篩選晶片列 */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-[11px]">
+            {subCategories.map((sub) => {
+              const isSubActive = selectedSubCategoryId === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => setSelectedSubCategoryId(sub.id)}
+                  className={`px-2.5 py-1 rounded-lg border whitespace-nowrap transition-all font-medium ${
+                    isSubActive
+                      ? 'bg-[#2563EB] text-white border-transparent shadow-xs'
+                      : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
+                  }`}
+                >
+                  {sub.name}
                 </button>
               );
             })}
@@ -728,8 +758,8 @@ export const StockScreenerView: React.FC = () => {
                   onClick={() => void handleOpenStock(stock)}
                   className="toss-card px-3.5 py-3 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
                 >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[15px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
                         {stock.name}
                       </span>
@@ -739,9 +769,25 @@ export const StockScreenerView: React.FC = () => {
                       <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
                         {stock.sectorName}
                       </span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                          stock.isFullMatch
+                            ? 'bg-blue-100 text-[#2563EB] dark:bg-blue-950/60 dark:text-blue-300'
+                            : 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/60 dark:text-emerald-300'
+                        }`}
+                      >
+                        {stock.isFullMatch ? '100% 契合' : `${stock.matchScore}% 契合`}
+                      </span>
                     </div>
-                    <div className="text-[11px] text-[#8B95A1]">
-                      ROE {stock.roePct}% · 營收 YoY +{stock.revenueYoYPct}% · 法人買超 {stock.instNetBuy5dLots} 張
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {stock.matchTags?.map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-1.5 py-0.2 rounded bg-[#F6F7F9] dark:bg-[#1F2631] text-[10px] text-[#4E5968] dark:text-[#9BA4B0] border border-[#EAEDF2] dark:border-[#262C36]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
                     </div>
                   </div>
 

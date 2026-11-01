@@ -7,7 +7,7 @@ import { ScreenerStockItem } from '../types';
 import { StockNewsItem } from './newsService';
 import { calculateTrimmedMedian } from './peerValuationEngine';
 
-export type TrendBias = 'STRONG_BULL' | 'MILD_BULL' | 'CONSOLIDATION' | 'BEARISH';
+export type TrendBias = 'STRONG_BULL' | 'MILD_BULL' | 'CONSOLIDATION' | 'WEAK_BEAR' | 'STRONG_BEAR' | 'BEARISH';
 export type ValuationStatus = 'DEEP_DISCOUNT' | 'UNDERVALUED' | 'FAIR' | 'OVERVALUED';
 
 export interface PriceLadder {
@@ -104,66 +104,153 @@ export function generateAIStockReport(
   const p0 = target.price;
   const atr = target.atr14 || Math.max(0.8, Math.round(p0 * 0.03 * 10) / 10);
 
-  // 1. 多空趨勢研判 (結合均線多空、法人買賣超、動能與 ATR)
-  let trendScore = 50;
-  if (target.aboveMa60) trendScore += 18;
-  if (target.aboveMa240) trendScore += 12;
-  if (target.instNetBuy5dLots > 0) trendScore += 15;
-  if (target.trustNetBuy5dLots > 0) trendScore += 15;
-  if (target.momentum60dPct > 8) trendScore += 10;
-  else if (target.momentum60dPct < -5) trendScore -= 15;
-  if (target.dailyChangePct > 0) trendScore += 5;
-  trendScore = Math.max(10, Math.min(98, trendScore));
-
-  let trendBias: TrendBias = 'CONSOLIDATION';
-  let trendLabel = '區間震盪整理';
-  let trendSummary = '目前股價於季線附近震盪壓縮，均線糾結，等待量能表態。';
-  let actionAdvice = '建議暫先觀望或採逢低區間操作，突破壓力線再行順勢加碼。';
-
-  if (trendScore >= 78) {
-    trendBias = 'STRONG_BULL';
-    trendLabel = '強大多頭格局';
-    trendSummary = `站穩 60MA 季線且均線呈多頭排列，三大法人近 5 日買超 ${target.instNetBuy5dLots > 0 ? '+' : ''}${target.instNetBuy5dLots} 張，多方籌碼強勢鎖碼。`;
-    actionAdvice = '趨勢偏多明確，回測支撐有守可積極分批布局，嚴守 2 ATR 防守點。';
-  } else if (trendScore >= 62) {
-    trendBias = 'MILD_BULL';
-    trendLabel = '溫和偏多反彈';
-    trendSummary = '股價維持於中期均線上方，動能溫和回溫，具備持續墊高潛力。';
-    actionAdvice = '可採取逢拉回佈局策略，不宜過度追高，分批建立基本持倉。';
-  } else if (trendScore <= 38) {
-    trendBias = 'BEARISH';
-    trendLabel = '空方修正整理';
-    trendSummary = '跌破關鍵均線支撐，法人買盤退場或呈現調節，短線承壓。';
-    actionAdvice = '空方力道主導，切勿貿然搶反彈，靜待止跌落底與籌碼沉澱訊號。';
-  }
-
-  // 2. 關鍵點位精算 (SL, TP1, TP2, TP3)
-  const slPrice = Math.max(0.5, Math.round((p0 - 2 * atr) * 10) / 10);
-  const slDownsidePct = Math.round(((slPrice - p0) / p0) * 1000) / 10;
-
-  // 尋找同業中位數以定錨 TP2
+  // 尋找同業中位數以定錨合理估值與 TP2
   const industryPeers = allStocks.filter(
     (s) => s.sectorId === target.sectorId && s.symbol !== target.symbol
   );
   const peerPes = industryPeers.map((p) => p.peRatio).filter((v) => v > 0);
   const peerMedianPe = peerPes.length >= 3 ? calculateTrimmedMedian(peerPes) : 18.5;
+  const discountPremiumPct = Math.round(((target.peRatio - peerMedianPe) / peerMedianPe) * 1000) / 10;
+
+  // 1. 均線架構與位階 (MA Ribbon Trend Strategy - 權重 30 分)
+  let maScore = 0;
+  if (target.aboveMa60 && target.aboveMa240) {
+    maScore += 18; // 雙站穩季線與年線多頭排列
+  } else if (!target.aboveMa60 && !target.aboveMa240) {
+    maScore -= 24; // 均線空頭排列，雙雙跌破下彎
+  } else if (!target.aboveMa60) {
+    maScore -= 16; // 跌破 60MA 季線，中期轉空
+  } else if (target.aboveMa60) {
+    maScore += 8; // 站上季線但年線仍在上方
+  }
+
+  // 2. 價格動能與突破/破底 (Momentum Breakout/Breakdown - 權重 25 分)
+  let momentumScore = 0;
+  if (target.momentum60dPct >= 15) {
+    momentumScore += 16;
+  } else if (target.momentum60dPct >= 5) {
+    momentumScore += 8;
+  } else if (target.momentum60dPct <= -12) {
+    momentumScore -= 20; // 破底重挫空頭主跌段
+  } else if (target.momentum60dPct < 0) {
+    momentumScore -= 10; // 弱勢陰跌走空
+  }
+  if (target.dailyChangePct > 3) momentumScore += 5;
+  else if (target.dailyChangePct < -3) momentumScore -= 6;
+
+  // 3. 三大法人與投信籌碼流向 (Smart Money Flow - 權重 25 分)
+  let chipScore = 0;
+  if (target.instNetBuy5dLots > 500 && target.trustNetBuy5dLots > 200) {
+    chipScore += 18; // 外資與投信「雙認養鎖碼」
+  } else if (target.instNetBuy5dLots < -1000 && target.trustNetBuy5dLots < -300) {
+    chipScore -= 22; // 外資與投信「雙調節出貨」
+  } else if (target.instNetBuy5dLots < -500) {
+    chipScore -= 12; // 外資單向大幅提款
+  } else if (target.trustNetBuy5dLots < -200) {
+    chipScore -= 10; // 投信棄守砍倉
+  } else if (target.instNetBuy5dLots > 0 || target.trustNetBuy5dLots > 0) {
+    chipScore += 8; // 法人買盤溫和回補
+  }
+
+  // 4. 基本面營收與成長動能 (Fundamental Momentum - 權重 15 分)
+  let fundScore = 0;
+  if (target.revenueYoYPct >= 20) {
+    fundScore += 12;
+  } else if (target.revenueYoYPct >= 5) {
+    fundScore += 6;
+  } else if (target.revenueYoYPct <= -15) {
+    fundScore -= 15; // 營收嚴重衰退
+  } else if (target.revenueYoYPct < 0) {
+    fundScore -= 8;
+  }
+
+  // 5. 同業相對估值折溢價 (Valuation Divergence - 權重 10 分)
+  let valScore = 0;
+  if (discountPremiumPct <= -15 && target.roePct >= 12) {
+    valScore += 8; // 體質優良卻深度折價，安全邊際高
+  } else if (discountPremiumPct > 35 && target.momentum60dPct < 0) {
+    valScore -= 12; // 估值泡沫且動能轉弱，殺估值風險高
+  }
+
+  const rawTrendScore = 50 + maScore + momentumScore + chipScore + fundScore + valScore;
+  const trendScore = Math.max(5, Math.min(98, Math.round(rawTrendScore)));
+
+  let trendBias: TrendBias = 'CONSOLIDATION';
+  let trendLabel = '區間震盪整理';
+  let trendSummary = '均線糾結且量能平淡，多空力道互有拉鋸，等待量能突破表態。';
+  let actionAdvice = '多空方向未明，建議暫先保留資金觀望，或採箱型下緣低接、上緣減碼操作。';
+
+  if (trendScore >= 76) {
+    trendBias = 'STRONG_BULL';
+    trendLabel = '強大多頭格局';
+    trendSummary = `均線呈多頭排列，外資投信近 5 日合計買超 ${target.instNetBuy5dLots > 0 ? '+' : ''}${target.instNetBuy5dLots} 張，多方強勢控盤。`;
+    actionAdvice = '多方掌控全局，拉回均線支撐有守可順勢分批加碼，以 2 ATR 設移動停利。';
+  } else if (trendScore >= 60) {
+    trendBias = 'MILD_BULL';
+    trendLabel = '溫和偏多蓄勢';
+    trendSummary = '股價維持於中期均線上方，量能溫和，具備震盪墊高挑戰前高的條件。';
+    actionAdvice = '建議逢拉回量縮時分批布局，切忌過度追價，嚴守季線支撐防守點。';
+  } else if (trendScore <= 24) {
+    trendBias = 'STRONG_BEAR';
+    trendLabel = '空頭破線崩跌';
+    trendSummary = `跌破季線與年線關鍵支撐，均線全面空頭排列，法人近 5 日大幅調節賣超 ${Math.abs(target.instNetBuy5dLots)} 張，下檔未見煞車訊號。`;
+    actionAdvice = '空方趨勢確立且破線下彎，持股者強烈建議反彈減碼出清，空手者嚴禁接刀摸底。';
+  } else if (trendScore <= 41) {
+    trendBias = 'WEAK_BEAR';
+    trendLabel = '弱勢偏空整理';
+    trendSummary = '跌破關鍵均線支撐，均線下彎蓋頭，法人籌碼偏向調節，短線反彈動能疲弱。';
+    actionAdvice = '偏空格局成形，持股者應趁反彈至均線壓力分批減碼避險，切勿貿然摸底。';
+  }
+
+  // 2. 關鍵點位精算 (SL, TP1, TP2, TP3)
+  const isBearish = trendBias === 'STRONG_BEAR' || trendBias === 'WEAK_BEAR';
+
+  let slPrice: number;
+  let slDownsidePct: number;
+  let tp1Price: number;
+  let tp1UpsidePct: number;
+  let tp2Price: number;
+  let tp2UpsidePct: number;
+  let tp3Price: number;
+  let tp3UpsidePct: number;
+  let riskRewardRatio: number;
+  let isRiskRewardFavorable: boolean;
 
   const qualityAlpha = (target.opmPct || 10) > 15 ? 1.08 : 1.0; // 品質溢價
   const eps = target.estimatedEps || Math.max(1, Math.round((p0 / (target.peRatio || 16)) * 10) / 10);
   const fairValueEstimate = Math.round(eps * peerMedianPe * qualityAlpha * 10) / 10;
 
-  const tp2Price = Math.max(Math.round(p0 * 1.08 * 10) / 10, fairValueEstimate);
-  const tp2UpsidePct = Math.round(((tp2Price - p0) / p0) * 1000) / 10;
+  if (isBearish) {
+    // 空方架構：防守點為上方反壓解套位，TP1/TP2 為下檔支撐測試滿足位
+    slPrice = Math.round((p0 + 1.5 * atr) * 10) / 10;
+    slDownsidePct = Math.round(((slPrice - p0) / p0) * 1000) / 10;
+    tp1Price = Math.max(0.5, Math.round((p0 - 1.0 * atr) * 10) / 10);
+    tp1UpsidePct = Math.round(((tp1Price - p0) / p0) * 1000) / 10;
+    tp2Price = Math.max(0.5, Math.round((p0 - 2.5 * atr) * 10) / 10);
+    tp2UpsidePct = Math.round(((tp2Price - p0) / p0) * 1000) / 10;
+    tp3Price = Math.max(0.5, Math.round((p0 - 4.0 * atr) * 10) / 10);
+    tp3UpsidePct = Math.round(((tp3Price - p0) / p0) * 1000) / 10;
+    riskRewardRatio = 0.5;
+    isRiskRewardFavorable = false;
+  } else {
+    // 多方與震盪架構：多單防守點在下方 2 ATR，TP1/TP2/TP3 往上看
+    slPrice = Math.max(0.5, Math.round((p0 - 2 * atr) * 10) / 10);
+    slDownsidePct = Math.round(((slPrice - p0) / p0) * 1000) / 10;
 
-  const tp1Price = Math.round((p0 + 0.5 * (tp2Price - p0)) * 10) / 10;
-  const tp1UpsidePct = Math.round(((tp1Price - p0) / p0) * 1000) / 10;
+    tp2Price = Math.max(Math.round(p0 * 1.08 * 10) / 10, fairValueEstimate);
+    tp2UpsidePct = Math.round(((tp2Price - p0) / p0) * 1000) / 10;
 
-  const tp3Price = Math.round(tp2Price * 1.15 * 10) / 10;
-  const tp3UpsidePct = Math.round(((tp3Price - p0) / p0) * 1000) / 10;
+    tp1Price = Math.round((p0 + 0.5 * (tp2Price - p0)) * 10) / 10;
+    tp1UpsidePct = Math.round(((tp1Price - p0) / p0) * 1000) / 10;
 
-  const risk1R = p0 - slPrice;
-  const reward2R = tp2Price - p0;
-  const riskRewardRatio = risk1R > 0 ? Math.round((reward2R / risk1R) * 100) / 100 : 2.5;
+    tp3Price = Math.round(tp2Price * 1.15 * 10) / 10;
+    tp3UpsidePct = Math.round(((tp3Price - p0) / p0) * 1000) / 10;
+
+    const risk1R = p0 - slPrice;
+    const reward2R = tp2Price - p0;
+    riskRewardRatio = risk1R > 0 ? Math.round((reward2R / risk1R) * 100) / 100 : 2.5;
+    isRiskRewardFavorable = riskRewardRatio >= 1.5;
+  }
 
   const ladder: PriceLadder = {
     currentPrice: p0,
@@ -176,12 +263,11 @@ export function generateAIStockReport(
     tp3Price,
     tp3UpsidePct,
     riskRewardRatio,
-    isRiskRewardFavorable: riskRewardRatio >= 1.5,
+    isRiskRewardFavorable,
     atr14: atr,
   };
 
   // 3. 價格合理性評估
-  const discountPremiumPct = Math.round(((target.peRatio - peerMedianPe) / peerMedianPe) * 1000) / 10;
   let valStatus: ValuationStatus = 'FAIR';
   let valLabel = '價格落在合理估值區間';
   let valSummary = `目前本益比 ${target.peRatio} 倍，與同業中位數 ${peerMedianPe} 倍相近，估值已合理反映基本面。`;
@@ -333,7 +419,12 @@ export async function enrichReportWithGemini(
         stockId: baseReport.symbol,
         stockName: baseReport.name,
         price: baseReport.ladder.currentPrice,
-        changePct: 0,
+        changePct: baseReport.ladder.slDownsidePct ? 0 : 0,
+        trendBias: baseReport.trendBias,
+        trendScore: baseReport.trendScore,
+        trendLabel: baseReport.trendLabel,
+        trendSummary: baseReport.trendSummary,
+        actionAdvice: baseReport.actionAdvice,
         ladder: baseReport.ladder,
         valuation: baseReport.valuation,
         fundamental: baseReport.fundamental,

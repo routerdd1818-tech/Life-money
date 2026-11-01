@@ -57,6 +57,9 @@ export interface FinMindAggregatedStockData {
   latestMonthlyRevenueMillionTwd?: number;
   revenueYoYPct?: number;
   revenueMonth?: number;
+  aboveMa20?: boolean;
+  aboveMa60?: boolean;
+  momentum60dPct?: number;
   source: 'finmind_live' | 'finmind_cache' | 'fallback';
   fetchedAt: string;
 }
@@ -228,8 +231,9 @@ export async function aggregateFinMindStockOverview(
     return null;
   }
 
+  const priceStart = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [prices, instFlows, revenues] = await Promise.all([
-    getFinMindStockPrices(rawSymbol, undefined, token),
+    getFinMindStockPrices(rawSymbol, priceStart, token),
     getFinMindInstitutionalFlow(rawSymbol, undefined, token),
     getFinMindMonthlyRevenue(rawSymbol, token),
   ]);
@@ -250,6 +254,34 @@ export async function aggregateFinMindStockOverview(
       ? Math.round(((latestPrice - previousClose) / previousClose) * 10000) / 100
       : 0;
   const volumeLots = Math.round(latestPriceRow.Trading_Volume / 1000);
+
+  // 1.5 均線與動能計算 (20MA, 60MA 季線, 60日動能)
+  let aboveMa20: boolean | undefined = undefined;
+  let aboveMa60: boolean | undefined = undefined;
+  let momentum60dPct: number | undefined = undefined;
+
+  if (sortedPrices.length >= 20) {
+    const last20 = sortedPrices.slice(-20);
+    const ma20 = last20.reduce((acc, cur) => acc + cur.close, 0) / 20;
+    aboveMa20 = latestPrice >= ma20;
+  }
+
+  if (sortedPrices.length >= 50) {
+    const windowLen = Math.min(60, sortedPrices.length);
+    const last60 = sortedPrices.slice(-windowLen);
+    const ma60 = last60.reduce((acc, cur) => acc + cur.close, 0) / windowLen;
+    aboveMa60 = latestPrice >= ma60;
+    const baseClose = last60[0].close;
+    if (baseClose > 0) {
+      momentum60dPct = Math.round(((latestPrice - baseClose) / baseClose) * 1000) / 10;
+    }
+  } else if (sortedPrices.length > 5) {
+    const baseClose = sortedPrices[0].close;
+    if (baseClose > 0) {
+      momentum60dPct = Math.round(((latestPrice - baseClose) / baseClose) * 1000) / 10;
+    }
+    aboveMa60 = aboveMa20;
+  }
 
   // 2. 三大法人近 5 日買賣超張數 (以股數除以 1000 換算為張數)
   let foreignNetBuyLots5d = 0;
@@ -315,6 +347,9 @@ export async function aggregateFinMindStockOverview(
     latestMonthlyRevenueMillionTwd,
     revenueYoYPct,
     revenueMonth,
+    aboveMa20,
+    aboveMa60,
+    momentum60dPct,
     source: 'finmind_live',
     fetchedAt: new Date().toISOString(),
   };

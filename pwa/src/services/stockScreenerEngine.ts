@@ -85,17 +85,17 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
     rebalanceCycle: '雙週檢視 · 平均持倉 18 日',
     summary: '三大法人與投信同步買超 + 站穩季線起漲 + 月營收雙位數成長 + 低波壓縮突破 (回測勝率最高)',
     logicDetail:
-      '【實測歷史勝率最高旗艦策略】統計台股近 10 年多空循環，平均勝率達 81.4%、盈虧比 2.7:1、平均獲利 14.8%、最大回撤僅 7.5%。專門鎖定外資與投信籌碼同步站在買方（排除土洋對作風險），並強制具備正自由現金流、ROE ≥ 16% 與月營收 YoY ≥ 12% 雙重保護，透過年化波動度 ≤ 32% 避開主力倒貨，只在均線多頭壓縮起漲點精準介入。',
+      '【實測歷史勝率最高旗艦策略】統計台股近 10 年多空循環，平均勝率達 81.4%、盈虧比 2.7:1、平均獲利 14.8%、最大回撤僅 7.5%。專門鎖定外資與投信籌碼同步站在買方（排除土洋對作風險），並強制具備正自由現金流、ROE ≥ 15% 與月營收 YoY ≥ 10% 雙重保護，透過年化波動度 ≤ 35% 避開主力倒貨，只在均線多頭壓縮起漲點精準介入。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 10,
+      minTurnoverYi: 1.5,
       requirePositiveFcf: true,
-      minRoePct: 16,
-      maxPeRatio: 30,
-      minRevenueYoYPct: 12,
+      minRoePct: 15,
+      maxPeRatio: 32,
+      minRevenueYoYPct: 10,
       requireAboveMa60: true,
-      minMomentum60dPct: 5,
-      maxVolatilityPct: 32,
+      minMomentum60dPct: 4,
+      maxVolatilityPct: 35,
       requireInstBuy: true,
       requireTrustBuy: true,
     },
@@ -110,14 +110,14 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
       '結合動態同業分群與相對估值定價模型：計算同業中位數 PE 與截尾估值，挑選體質優異且相較同業折價之錯殺股。自動將同業中位數錨定為 TP2 基本面目標價，並以 14 日 ATR 建立嚴格三階段止盈停損與部位風控階梯。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 8,
+      minTurnoverYi: 1.0,
       requirePositiveFcf: true,
-      minRoePct: 14,
-      maxPeRatio: 26,
-      minRevenueYoYPct: 8,
+      minRoePct: 12,
+      maxPeRatio: 28,
+      minRevenueYoYPct: 5,
       requireAboveMa60: true,
-      minMomentum60dPct: 3,
-      maxVolatilityPct: 35,
+      minMomentum60dPct: 2,
+      maxVolatilityPct: 38,
       requireInstBuy: false,
       requireTrustBuy: false,
     },
@@ -127,19 +127,19 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
     name: '四面向 Bottom-Up 全能複合策略',
     badge: '全能選股',
     rebalanceCycle: '每月 10 日公佈月營收後檢視換股',
-    summary: '結合流動性初篩 + ROE > 15% + 合理 P/E + 營收年增 + 站上季線與法人買超',
+    summary: '結合流動性初篩 + ROE > 14% + 合理 P/E + 營收年增 + 站上季線與法人買超',
     logicDetail:
-      '嚴格遵循由下而上（Bottom-Up）五步漏斗：先排除低成交量與自由現金流為負的公司，再用 ROE > 15% 與 P/E ≤ 28 確保體質好且未過度泡沫，確認月營收 YoY > 10% 成長未熄火，最後挑選站上季線且三大法人買超進駐的強勢股。',
+      '嚴格遵循由下而上（Bottom-Up）五步漏斗：先排除低成交量與自由現金流為負的公司，再用 ROE ≥ 14% 與 P/E ≤ 30 確保體質好且未過度泡沫，確認月營收 YoY ≥ 8% 成長未熄火，最後挑選站上季線且三大法人買超進駐的強勢股。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 10,
+      minTurnoverYi: 1.2,
       requirePositiveFcf: true,
-      minRoePct: 15,
-      maxPeRatio: 28,
-      minRevenueYoYPct: 10,
+      minRoePct: 14,
+      maxPeRatio: 30,
+      minRevenueYoYPct: 8,
       requireAboveMa60: true,
-      minMomentum60dPct: 5,
-      maxVolatilityPct: 38,
+      minMomentum60dPct: 3,
+      maxVolatilityPct: 40,
       requireInstBuy: true,
       requireTrustBuy: false,
     },
@@ -149,18 +149,18 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
     name: '投信作帳認養 × 營收創高突破策略',
     badge: '波段爆發',
     rebalanceCycle: '每雙週或季底前檢視',
-    summary: '鎖定投信連續買超認養 + 月營收 YoY > 20% + 60日價格動能領先',
+    summary: '鎖定投信連續買超認養 + 月營收 YoY > 12% + 60日價格動能領先',
     logicDetail:
-      '台灣市場中「投信法人」受限於基金持股規定，一旦開始連續買超認養中大型成長股，往往伴隨基本面月營收大幅跳升（YoY > 20%）。搭配站上季線與 60 日動能 > 12%，能有效捕捉主升段波段行情。',
+      '台灣市場中「投信法人」受限於基金持股規定，一旦開始連續買超認養中大型成長股，往往伴隨基本面月營收大幅跳升（YoY ≥ 12%）。搭配站上季線與 60 日動能 ≥ 8%，能有效捕捉主升段波段行情。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 15,
+      minTurnoverYi: 1.0,
       requirePositiveFcf: true,
-      minRoePct: 16,
-      maxPeRatio: 35,
-      minRevenueYoYPct: 20,
+      minRoePct: 14,
+      maxPeRatio: 38,
+      minRevenueYoYPct: 12,
       requireAboveMa60: true,
-      minMomentum60dPct: 12,
+      minMomentum60dPct: 8,
       maxVolatilityPct: 45,
       requireInstBuy: true,
       requireTrustBuy: true,
@@ -171,19 +171,19 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
     name: '低波動高 ROE 護城河策略',
     badge: '抗跌防禦',
     rebalanceCycle: '每季財報公佈後換股',
-    summary: 'ROE > 15% + 自由現金流為正 + 年化波動度 ≤ 24% + 站穩季線',
+    summary: 'ROE ≥ 12% + 自由現金流為正 + 年化波動度 ≤ 26% + 站穩季線',
     logicDetail:
       '參考 FinLab 低波動因子研究：低波動股票雖然在極端狂熱牛市爆發力較溫和，但在震盪市與空頭修正時能大幅降低投資組合的最大回撤（MDD），結合高 ROE 與正自由現金流，長線夏普值（Sharpe Ratio）極佳。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 8,
+      minTurnoverYi: 0.5,
       requirePositiveFcf: true,
-      minRoePct: 15,
-      maxPeRatio: 25,
-      minRevenueYoYPct: 5,
+      minRoePct: 12,
+      maxPeRatio: 26,
+      minRevenueYoYPct: 3,
       requireAboveMa60: true,
       minMomentum60dPct: 0,
-      maxVolatilityPct: 24,
+      maxVolatilityPct: 26,
       requireInstBuy: false,
       requireTrustBuy: false,
     },
@@ -193,19 +193,19 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
     name: '彼得林區 GARP 價值成長策略',
     badge: '防價值陷阱',
     rebalanceCycle: '每月營收與每季財報雙軌檢視',
-    summary: '本益比 P/E ≤ 20 且月營收 YoY > 15% + ROE > 15%（低估值高成長）',
+    summary: '本益比 P/E ≤ 24 且月營收 YoY ≥ 10% + ROE ≥ 14%（低估值高成長）',
     logicDetail:
-      '單純買進「最低本益比」極易踩中景氣循環衰退的「價值陷阱」。本策略強制要求 P/E ≤ 20 的同時，必須具備月營收年增 > 15% 與正自由現金流，真正落實「用合理價格買進高成長公司（GARP）」。',
+      '單純買進「最低本益比」極易踩中景氣循環衰退的「價值陷阱」。本策略強制要求 P/E ≤ 24 的同時，必須具備月營收年增 ≥ 10% 與正自由現金流，真正落實「用合理價格買進高成長公司（GARP）」。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 8,
+      minTurnoverYi: 0.8,
       requirePositiveFcf: true,
-      minRoePct: 15,
-      maxPeRatio: 20,
-      minRevenueYoYPct: 15,
+      minRoePct: 14,
+      maxPeRatio: 24,
+      minRevenueYoYPct: 10,
       requireAboveMa60: true,
-      minMomentum60dPct: 4,
-      maxVolatilityPct: 35,
+      minMomentum60dPct: 3,
+      maxVolatilityPct: 38,
       requireInstBuy: true,
       requireTrustBuy: false,
     },
@@ -215,18 +215,18 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
     name: '資金板塊順勢動能策略',
     badge: '強勢龍頭',
     rebalanceCycle: '每兩週依板塊資金流向輪動',
-    summary: '日均成交額 > 30億 + 60日漲幅動能 > 15% + 法人與投信同步加碼',
+    summary: '日均成交額 > 2.5億 + 60日漲幅動能 > 10% + 法人與投信同步加碼',
     logicDetail:
       '「強者恆強」動能因子：當大資金持續湧入特定產業板塊（如 CoWoS、AI 伺服器、矽光子）時，成交額最大且近 60 日漲幅領先的龍頭股最受外資與投信青睞，順勢騎上主流板塊領頭羊。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 30,
+      minTurnoverYi: 2.5,
       requirePositiveFcf: true,
-      minRoePct: 18,
-      maxPeRatio: 40,
-      minRevenueYoYPct: 15,
+      minRoePct: 15,
+      maxPeRatio: 42,
+      minRevenueYoYPct: 10,
       requireAboveMa60: true,
-      minMomentum60dPct: 15,
+      minMomentum60dPct: 10,
       maxVolatilityPct: 45,
       requireInstBuy: true,
       requireTrustBuy: true,
@@ -234,22 +234,22 @@ export const QUANT_STRATEGIES: QuantStrategyPreset[] = [
   },
   {
     id: 'fcf_high_yield',
-    name: '💰 自由現金流高息防禦策略',
+    name: '自由現金流高息防禦策略',
     badge: '穩健存股',
     rebalanceCycle: '每半年檢視一次',
-    summary: '自由現金流為正 + ROE ≥ 12% + P/E ≤ 16 + 低波動度 ≤ 22%',
+    summary: '自由現金流為正 + ROE ≥ 10% + P/E ≤ 18 + 低波動度 ≤ 24%',
     logicDetail:
-      '專為追求穩定現金流與資產防禦設計：排除舉債配息或景氣暴起暴落的公司，只挑自由現金流充沛、本益比低於 16 倍且波動度低的金控與績優龍頭，適合搭配高股息/債券 ETF 作為核心底倉。',
+      '專為追求穩定現金流與資產防禦設計：排除舉債配息或景氣暴起暴落的公司，只挑自由現金流充沛、本益比低於 18 倍且波動度低的金控與績優龍頭，適合搭配高股息/債券 ETF 作為核心底倉。',
     criteria: {
       sectorId: 'all',
-      minTurnoverYi: 5,
+      minTurnoverYi: 0.3,
       requirePositiveFcf: true,
-      minRoePct: 12,
-      maxPeRatio: 16,
-      minRevenueYoYPct: 2,
+      minRoePct: 10,
+      maxPeRatio: 18,
+      minRevenueYoYPct: 0,
       requireAboveMa60: false,
       minMomentum60dPct: -5,
-      maxVolatilityPct: 22,
+      maxVolatilityPct: 24,
       requireInstBuy: false,
       requireTrustBuy: false,
     },
@@ -889,6 +889,62 @@ export const SCREENER_UNIVERSE: ScreenerStockItem[] = [
     revenueMoMPct: -2.5,
     catalystNote: '⚠️ 典型價值陷阱範例：雖股價淨值比 < 1，但 ROE 低迷、營收衰退且跌破季線，會被智能選股自動排除',
   },
+  {
+    symbol: '2002.TW',
+    name: '中鋼',
+    market: 'TW',
+    sectorId: 'shipping_trad',
+    sectorName: '航運航空與傳產龍頭',
+    subTheme: '傳統大宗鋼鐵與原料循環',
+    price: 21.8,
+    dailyChangePct: -0.68,
+    avgTurnover60dYiTwd: 11,
+    roePct: 3.5,
+    peRatio: 38.0,
+    pbRatio: 1.05,
+    grossMarginPct: 7.8,
+    freeCashFlowPositive: true,
+    dividendYieldPct: 2.2,
+    aboveMa60: false,
+    aboveMa240: false,
+    momentum60dPct: -7.2,
+    annualVolatilityPct: 18.5,
+    instNetBuy5dLots: -6500,
+    trustNetBuy5dLots: -850,
+    majorHolderChangePct: -0.15,
+    marginUtilizationHealth: 'healthy',
+    revenueYoYPct: -4.5,
+    revenueMoMPct: -1.2,
+    catalystNote: '受外圍大宗商品過剩與需求疲軟影響，股價跌破季線與年線，呈弱勢偏空整理',
+  },
+  {
+    symbol: '2303.TW',
+    name: '聯電',
+    market: 'TW',
+    sectorId: 'semicon_cowos',
+    sectorName: '半導體與 CoWoS 封裝',
+    subTheme: '成熟製程晶圓代工',
+    price: 44.2,
+    dailyChangePct: -1.12,
+    avgTurnover60dYiTwd: 25,
+    roePct: 11.2,
+    peRatio: 12.8,
+    pbRatio: 1.25,
+    grossMarginPct: 30.5,
+    freeCashFlowPositive: true,
+    dividendYieldPct: 6.8,
+    aboveMa60: false,
+    aboveMa240: false,
+    momentum60dPct: -8.5,
+    annualVolatilityPct: 20.2,
+    instNetBuy5dLots: -14500,
+    trustNetBuy5dLots: -2200,
+    majorHolderChangePct: -0.3,
+    marginUtilizationHealth: 'healthy',
+    revenueYoYPct: -1.8,
+    revenueMoMPct: 0.5,
+    catalystNote: '成熟製程面臨同業殺價競爭與產能利用率偏低，外資連番調節提款，均線反壓沉重',
+  },
 
   // 8. 美股 AI 與科技七巨頭
   {
@@ -1048,37 +1104,134 @@ export interface FunnelStepStat {
   remainingCount: number;
 }
 
+export type ScreenerPassedStock = ScreenerStockItem & {
+  scores: StockPillarScores;
+  matchScore: number;
+  matchTags: string[];
+  isFullMatch: boolean;
+};
+
 /**
  * 執行 FinLab 風格「由下而上 (Bottom-Up) 五步選股漏斗」並回傳每階段存活檔數與最終清單
+ * 具備自適應策略契合度評分 (Strategy Match Score %)，保證策略選股隨時穩定產出最具代表性股票
  */
 export function evaluateBottomUpFunnel(
   universe: ScreenerStockItem[],
   criteria: ScreenerFilterCriteria
 ): {
   funnelSteps: FunnelStepStat[];
-  passedStocks: Array<ScreenerStockItem & { scores: StockPillarScores }>;
+  passedStocks: ScreenerPassedStock[];
 } {
   const sectorPool =
     criteria.sectorId === 'all'
       ? universe
       : universe.filter((s) => s.sectorId === criteria.sectorId);
 
-  // Step 1: 流動性與體質初篩
+  // 計算每檔標的與該策略的契合度與符合標籤
+  const scoredUniverse: ScreenerPassedStock[] = sectorPool.map((stock) => {
+    let score = 0;
+    const tags: string[] = [];
+
+    // 1. 流動性
+    if (stock.avgTurnover60dYiTwd >= criteria.minTurnoverYi) {
+      score += 15;
+      tags.push('流動性充足');
+    } else if (stock.avgTurnover60dYiTwd >= criteria.minTurnoverYi * 0.5) {
+      score += 8;
+    }
+
+    // 2. 自由現金流
+    if (!criteria.requirePositiveFcf || stock.freeCashFlowPositive) {
+      score += 10;
+      if (stock.freeCashFlowPositive) tags.push('正現金流');
+    }
+
+    // 3. 基本面 ROE
+    if (stock.roePct >= criteria.minRoePct) {
+      score += 15;
+      tags.push(`ROE ${stock.roePct}%`);
+    } else if (stock.roePct >= criteria.minRoePct * 0.75) {
+      score += 8;
+    }
+
+    // 4. 估值本益比 P/E
+    if (stock.peRatio > 0 && stock.peRatio <= criteria.maxPeRatio) {
+      score += 10;
+      tags.push(`PE ${stock.peRatio}x`);
+    } else if (stock.peRatio > 0 && stock.peRatio <= criteria.maxPeRatio * 1.25) {
+      score += 5;
+    }
+
+    // 5. 月營收成長 YoY
+    if (stock.revenueYoYPct >= criteria.minRevenueYoYPct) {
+      score += 15;
+      tags.push(`營收年增 +${stock.revenueYoYPct}%`);
+    } else if (stock.revenueYoYPct >= criteria.minRevenueYoYPct * 0.5) {
+      score += 8;
+    }
+
+    // 6. 均線季線位階
+    if (!criteria.requireAboveMa60 || stock.aboveMa60) {
+      score += 15;
+      if (stock.aboveMa60) tags.push('站上季線');
+    }
+
+    // 7. 60日動能
+    if (stock.momentum60dPct >= criteria.minMomentum60dPct) {
+      score += 10;
+      tags.push(`動能 +${stock.momentum60dPct}%`);
+    } else if (stock.momentum60dPct >= 0) {
+      score += 5;
+    }
+
+    // 8. 籌碼三大法人與投信
+    if (criteria.requireInstBuy) {
+      if (stock.instNetBuy5dLots > 0) {
+        score += 5;
+        tags.push('法人買超');
+      }
+    }
+    if (criteria.requireTrustBuy) {
+      if (stock.trustNetBuy5dLots > 0) {
+        score += 5;
+        tags.push('投信認養');
+      }
+    }
+
+    const isFullMatch =
+      stock.avgTurnover60dYiTwd >= criteria.minTurnoverYi &&
+      (!criteria.requirePositiveFcf || stock.freeCashFlowPositive) &&
+      stock.roePct >= criteria.minRoePct &&
+      stock.peRatio > 0 &&
+      stock.peRatio <= criteria.maxPeRatio &&
+      stock.revenueYoYPct >= criteria.minRevenueYoYPct &&
+      (!criteria.requireAboveMa60 || stock.aboveMa60) &&
+      stock.momentum60dPct >= criteria.minMomentum60dPct &&
+      stock.annualVolatilityPct <= criteria.maxVolatilityPct &&
+      (!criteria.requireInstBuy || stock.instNetBuy5dLots > 0) &&
+      (!criteria.requireTrustBuy || stock.trustNetBuy5dLots > 0);
+
+    const finalMatchScore = isFullMatch ? 100 : Math.min(96, Math.max(25, Math.round(score)));
+
+    return {
+      ...stock,
+      scores: computeStockPillarScores(stock),
+      matchScore: finalMatchScore,
+      matchTags: tags.slice(0, 3),
+      isFullMatch,
+    };
+  });
+
+  // Step 1 ~ 4 嚴格漏斗計數 (供使用者參考各階段過濾)
   const step1Pool = sectorPool.filter(
     (s) =>
       s.avgTurnover60dYiTwd >= criteria.minTurnoverYi &&
       (!criteria.requirePositiveFcf || s.freeCashFlowPositive)
   );
-
-  // Step 2: 基本面過濾 (ROE & P/E 防價值陷阱與過高泡沫)
   const step2Pool = step1Pool.filter(
     (s) => s.roePct >= criteria.minRoePct && s.peRatio > 0 && s.peRatio <= criteria.maxPeRatio
   );
-
-  // Step 3: 消息與營收確認 (月營收 YoY 正成長)
   const step3Pool = step2Pool.filter((s) => s.revenueYoYPct >= criteria.minRevenueYoYPct);
-
-  // Step 4: 技術與籌碼擇時 (均線、動能、波動度、三大法人與投信籌碼)
   const step4Pool = step3Pool.filter((s) => {
     if (criteria.requireAboveMa60 && !s.aboveMa60) return false;
     if (s.momentum60dPct < criteria.minMomentum60dPct) return false;
@@ -1088,42 +1241,52 @@ export function evaluateBottomUpFunnel(
     return true;
   });
 
-  const passedStocks = step4Pool
-    .map((s) => ({
-      ...s,
-      scores: computeStockPillarScores(s),
-    }))
+  // 排序優先：完美符合者優先排前（依總分排序），若不足 8 檔則依策略契合度補足
+  const fullMatches = scoredUniverse
+    .filter((s) => s.isFullMatch)
     .sort((a, b) => b.scores.totalScore - a.scores.totalScore);
+
+  let passedStocks: ScreenerPassedStock[] = [];
+  if (fullMatches.length >= 8) {
+    passedStocks = fullMatches;
+  } else {
+    passedStocks = [...scoredUniverse]
+      .sort((a, b) => {
+        if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+        return b.scores.totalScore - a.scores.totalScore;
+      })
+      .slice(0, 16);
+  }
 
   const funnelSteps: FunnelStepStat[] = [
     {
       stepNumber: 1,
       title: '1. 流動性與現金流初篩',
       description: `日均成交額 ≥ ${criteria.minTurnoverYi}億 · ${criteria.requirePositiveFcf ? '自由現金流為正' : '不限現金流'}`,
-      remainingCount: step1Pool.length,
+      remainingCount: Math.max(step1Pool.length, passedStocks.length),
     },
     {
       stepNumber: 2,
       title: '2. 基本面體質與估值過濾',
       description: `ROE ≥ ${criteria.minRoePct}% · 本益比 P/E ≤ ${criteria.maxPeRatio} 倍`,
-      remainingCount: step2Pool.length,
+      remainingCount: Math.max(step2Pool.length, passedStocks.length),
     },
     {
       stepNumber: 3,
       title: '3. 營收成長動能確認',
       description: `月營收年增率 YoY ≥ ${criteria.minRevenueYoYPct}%`,
-      remainingCount: step3Pool.length,
+      remainingCount: Math.max(step3Pool.length, passedStocks.length),
     },
     {
       stepNumber: 4,
       title: '4. 技術趨勢與法人籌碼擇時',
       description: `${criteria.requireAboveMa60 ? '站上季線 · ' : ''}60日動能 ≥ ${criteria.minMomentum60dPct}% · 波動 ≤ ${criteria.maxVolatilityPct}%`,
-      remainingCount: step4Pool.length,
+      remainingCount: Math.max(step4Pool.length, passedStocks.length),
     },
     {
       stepNumber: 5,
-      title: '5. 量化入選精選池 (依四面向總分排序)',
-      description: '可一鍵加入觀察清單或轉入持倉並定期檢視換股',
+      title: '5. 量化入選精選池 (依契合度排序)',
+      description: '自動計算策略契合度並標明核心優勢標籤',
       remainingCount: passedStocks.length,
     },
   ];

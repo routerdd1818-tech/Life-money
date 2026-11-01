@@ -207,18 +207,34 @@ function freeQuoteApiDevPlugin(): Plugin {
               process.env.VITE_GEMINI_API_KEY ||
               '';
 
+            const isBearishTrend = parsed.trendBias === 'STRONG_BEAR' || parsed.trendBias === 'WEAK_BEAR';
             const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${key}`;
-            const prompt = `你現在是台灣頂尖證券自營部或避險基金的「首席量化操盤手」，專精結合基本面相對估值、籌碼流向與 ATR 波動率進行紀律交易。
+            const prompt = `你現在是台灣頂尖證券自營部或避險基金的「首席量化操盤手」，專精結合均線位階、法人籌碼、基本面相對估值與 ATR 波動率進行紀律交易。
 請針對以下個股量化數據與市場情報，進行深度、直率、無廢話的「實戰操盤決策分析」：
 標的：${parsed.stockId || ''} ${parsed.stockName || ''}，現價 NT$ ${parsed.price || ''} (${parsed.changePct || 0}%)
-關鍵價位：停損 NT$ ${parsed.ladder?.slPrice || 'N/A'}，TP1 NT$ ${parsed.ladder?.tp1Price || 'N/A'}，TP2 NT$ ${parsed.ladder?.tp2Price || 'N/A'}，TP3 NT$ ${parsed.ladder?.tp3Price || 'N/A'}
-同業估值：${parsed.valuation?.status || ''} (折溢價 ${parsed.valuation?.discountPremiumPct || 0}%)，同業中位數 PE: ${parsed.valuation?.peerMedianPe || 'N/A'}
+【量化多空判定與技術籌碼位階】
+- 量化多空定調：${parsed.trendLabel || '區間震盪整理'} (多空力道指數: ${parsed.trendScore || 50} / 100，型態評級: ${parsed.trendBias || 'CONSOLIDATION'})
+- 趨勢特徵診斷：${parsed.trendSummary || '均線與籌碼進入關鍵抉擇期'}
+- 量化操作指引：${parsed.actionAdvice || '依照點位紀律操作'}
+【交易關鍵價位】
+${
+  isBearishTrend
+    ? `- 上方反壓防線 (SL, 反彈減碼點)：NT$ ${parsed.ladder?.slPrice || 'N/A'}
+- 下檔初步支撐測試 (TP1)：NT$ ${parsed.ladder?.tp1Price || 'N/A'}
+- 空方波段滿足價 (TP2)：NT$ ${parsed.ladder?.tp2Price || 'N/A'}
+- 極端破底目標價 (TP3)：NT$ ${parsed.ladder?.tp3Price || 'N/A'}`
+    : `- 停損防守價 (SL, 2×ATR)：NT$ ${parsed.ladder?.slPrice || 'N/A'}
+- 保本止盈價 1 (TP1, 折價收斂50%減碼保本)：NT$ ${parsed.ladder?.tp1Price || 'N/A'}
+- 基本面目標價 (TP2, 同業中位數合理價)：NT$ ${parsed.ladder?.tp2Price || 'N/A'}
+- 趨勢延伸價 3 (TP3, 龍頭估值溢價/移動停利)：NT$ ${parsed.ladder?.tp3Price || 'N/A'}`
+}
+同業估值：${parsed.valuation?.statusLabel || parsed.valuation?.status || ''} (折溢價 ${parsed.valuation?.discountPremiumPct || 0}%)，同業中位數 PE: ${parsed.valuation?.peerMedianPe || 'N/A'}
 基本面：ROE ${parsed.fundamental?.roeRating || ''}，毛利護城河 ${parsed.fundamental?.marginMoat || ''}
 重大新聞摘要：${(parsed.news || []).slice(0, 3).map((n: any) => n.title).join(' / ') || '維持常態'}
 
 請分四大段：
-1. 【多空定調與核心結論】
-2. 【操盤手深度思路與攻防節奏】
+1. 【多空定調與核心結論】：明確依據量化多空判定（${parsed.trendLabel || '區間震盪'}，指數 ${parsed.trendScore || 50}/100）。若為「弱勢偏空」或「空頭破線」，必須嚴正定調為防守/避險/出清，嚴禁盲目喊多或粉飾太平！
+2. 【操盤手深度思路與攻防節奏】：分析主力與法人買賣心態。若偏多，分析 SL 防守與 TP1/TP2 攻防；若偏空或破線，分析上方反壓解套點、下檔支撐破底危機與持股減碼時機。
 3. 【同業折溢價與基本面質化觀點】
 4. 【黑天鵝風險與避坑叮嚀】
 語氣務必乾脆專業，無廢話。`;

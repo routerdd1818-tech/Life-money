@@ -84,6 +84,7 @@ const DEFAULT_SETTINGS: VaultSettings = {
   finMindToken:
     (import.meta.env.VITE_FINMIND_TOKEN as string) ||
     'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoidGFuZzkyMTExOCIsImVtYWlsIjoidGFuZ2doZ2hAZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.eV8XmNzmgJGDp2azc5NoX8jgg1PYQNdbn9Cc9CecpH0',
+  geminiApiKey: (import.meta.env.VITE_GEMINI_API_KEY as string) || '',
   theme: 'light',
   autoSyncEnabled: false,
   autoRefreshOnOpen: true,
@@ -263,6 +264,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             supabaseUrl: parsed.settings.supabaseUrl || DEFAULT_SETTINGS.supabaseUrl,
             supabaseAnonKey: parsed.settings.supabaseAnonKey || DEFAULT_SETTINGS.supabaseAnonKey,
             finMindToken: parsed.settings.finMindToken || DEFAULT_SETTINGS.finMindToken,
+            geminiApiKey: parsed.settings.geminiApiKey || DEFAULT_SETTINGS.geminiApiKey,
           });
         }
       }

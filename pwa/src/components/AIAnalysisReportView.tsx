@@ -27,7 +27,9 @@ import { fetchStockNews, StockNewsItem } from '../services/newsService';
 import {
   AIStockAnalysisReport,
   generateAIStockReport,
+  enrichReportWithGemini,
 } from '../services/aiStockAnalysisEngine';
+import { useVault } from '../context/VaultContext';
 
 interface AIAnalysisReportViewProps {
   stock: ScreenerStockItem;
@@ -38,23 +40,41 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
   stock,
   allStocks = [],
 }) => {
+  const { settings } = useVault();
   const [report, setReport] = useState<AIStockAnalysisReport | null>(null);
   const [news, setNews] = useState<StockNewsItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isGeminiLoading, setIsGeminiLoading] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
 
   const runAnalysis = async () => {
     setIsLoading(true);
     try {
       const newsItems = await fetchStockNews(stock.name || stock.symbol, 6);
       setNews(newsItems);
-      const generated = generateAIStockReport(stock, allStocks, newsItems);
-      setReport(generated);
+      // 1. 先快速生成基礎量化報告 (0ms 立即可見)
+      const baseGenerated = generateAIStockReport(stock, allStocks, newsItems);
+      setReport(baseGenerated);
+      setIsLoading(false);
+
+      // 2. 非同步連動 Google Gemini 3.5 旗艦模型生成深度操盤手分析
+      setIsGeminiLoading(true);
+      const enriched = await enrichReportWithGemini(baseGenerated, settings.geminiApiKey);
+      setReport(enriched);
     } catch {
-      const generated = generateAIStockReport(stock, allStocks, []);
-      setReport(generated);
+      const baseGenerated = generateAIStockReport(stock, allStocks, []);
+      setReport(baseGenerated);
     } finally {
       setIsLoading(false);
+      setIsGeminiLoading(false);
     }
+  };
+
+  const copyGeminiText = () => {
+    if (!report?.geminiInsight?.rawText) return;
+    navigator.clipboard.writeText(report.geminiInsight.rawText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   useEffect(() => {
@@ -130,6 +150,63 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
+      </div>
+
+      {/* 1.5 Google Gemini 3.5 旗艦大語言模型深度思考觀點 */}
+      <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-blue-50/40 to-purple-50/50 dark:from-[#171D28] dark:via-[#161D2B] dark:to-[#1C1A29] border border-indigo-200/80 dark:border-indigo-900/40 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
+            <span className="font-bold text-sm text-[#191F28] dark:text-[#F2F4F8]">
+              Gemini 3.5 操盤手深度解析
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+              gemini-3.5-flash-lite
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {report.geminiInsight?.rawText && (
+              <button
+                type="button"
+                onClick={copyGeminiText}
+                className="px-2 py-0.5 rounded text-[11px] font-medium text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#2563EB] bg-white/70 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700"
+              >
+                {copied ? '已複製' : '複製觀點'}
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={isGeminiLoading}
+              onClick={() => void runAnalysis()}
+              className="p-1 rounded-md text-[#8B95A1] hover:text-[#2563EB] transition-colors"
+              title="重新推演"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${
+                  isGeminiLoading ? 'animate-spin text-[#2563EB]' : ''
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {isGeminiLoading && !report.geminiInsight ? (
+          <div className="py-4 flex items-center justify-center gap-2 text-xs text-[#2563EB]">
+            <div className="w-4 h-4 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin" />
+            <span>Gemini 3.5 正在調閱籌碼、即時新聞與同業數據深度推演中...</span>
+          </div>
+        ) : report.geminiInsight?.rawText ? (
+          <div className="text-xs leading-relaxed text-[#333D4B] dark:text-[#D1D6DB] space-y-2 whitespace-pre-wrap font-sans bg-white/70 dark:bg-[#12161F]/70 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-950/60 shadow-xs">
+            {report.geminiInsight.rawText}
+          </div>
+        ) : (
+          <div className="text-xs text-[#8B95A1] italic">
+            以同業中位數與 ATR 風控量化數據為主，可點擊右上重新整理按鈕調用 Gemini 質化觀點。
+          </div>
+        )}
       </div>
 
       {/* 2. 關鍵點位梯形看板 (SL / 現價 / TP1 / TP2 / TP3) */}

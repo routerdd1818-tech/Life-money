@@ -59,6 +59,13 @@ export interface PeerComparisonRow {
   relativeRank: string;
 }
 
+export interface GeminiInsight {
+  isGeneratedByGemini: boolean;
+  modelName: string;
+  rawText: string;
+  generatedAt: string;
+}
+
 export interface AIStockAnalysisReport {
   symbol: string;
   name: string;
@@ -82,6 +89,8 @@ export interface AIStockAnalysisReport {
   // 6. 即時新聞與催化劑
   news: StockNewsItem[];
   catalystSummary: string;
+  // 7. Google Gemini 3.5 旗艦大語言模型深度思考觀點
+  geminiInsight?: GeminiInsight;
 }
 
 /**
@@ -307,4 +316,62 @@ export function generateAIStockReport(
     news: newsItems,
     catalystSummary,
   };
+}
+
+/**
+ * 透過 Google Gemini 3.5 旗艦模型對量化報告進行質化深度賦能
+ */
+export async function enrichReportWithGemini(
+  baseReport: AIStockAnalysisReport,
+  userApiKey?: string
+): Promise<AIStockAnalysisReport> {
+  try {
+    const res = await fetch('/api/ai-analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stockId: baseReport.symbol,
+        stockName: baseReport.name,
+        price: baseReport.ladder.currentPrice,
+        changePct: 0,
+        ladder: baseReport.ladder,
+        valuation: baseReport.valuation,
+        fundamental: baseReport.fundamental,
+        peers: baseReport.peers.filter((p) => !p.isTarget),
+        news: baseReport.news,
+        userApiKey,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.ok && data.rawText) {
+        return {
+          ...baseReport,
+          geminiInsight: {
+            isGeneratedByGemini: true,
+            modelName: data.model || 'gemini-3.5-flash-lite',
+            rawText: data.rawText,
+            generatedAt: data.generatedAt || new Date().toISOString(),
+          },
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[Gemini AI Enrich Warning]', err);
+  }
+  return baseReport;
+}
+
+/**
+ * 完整非同步生成方法（結合量化計算與 Gemini 3.5 LLM 深度觀點）
+ */
+export async function generateAIStockReportAsync(
+  target: ScreenerStockItem,
+  allStocks: ScreenerStockItem[] = [],
+  newsItems: StockNewsItem[] = [],
+  userApiKey?: string
+): Promise<AIStockAnalysisReport> {
+  const base = generateAIStockReport(target, allStocks, newsItems);
+  return await enrichReportWithGemini(base, userApiKey);
 }

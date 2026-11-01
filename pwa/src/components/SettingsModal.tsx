@@ -505,6 +505,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </a>
               </div>
             </div>
+
+            {/* Google Gemini AI 大語言模型設定 */}
+            <div className="p-3 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-[#191F28] dark:text-[#F2F4F8] text-xs flex items-center gap-1.5">
+                    <span>Google Gemini AI 操盤手大模型</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                      gemini-3.5-flash-lite
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#8B95A1]">
+                    結合個股籌碼、同業折溢價中位數與即時新聞，生成深度質化操盤觀點
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600">
+                  {settings.geminiApiKey ? '已啟用' : '使用系統金鑰'}
+                </span>
+              </div>
+
+              <div>
+                <input
+                  type="password"
+                  value={settings.geminiApiKey || ''}
+                  onChange={(e) => updateSettings({ geminiApiKey: e.target.value })}
+                  placeholder="輸入 Google Gemini API Key (可使用個人免費金鑰)"
+                  className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-[#F6F7F9] dark:bg-[#1F2631] text-xs font-mono text-[#191F28] dark:text-[#F2F4F8]"
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-[#8B95A1]">
+                <span>系統已內建專屬 API Key，開箱即可自動生成</span>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#2563EB] hover:underline"
+                >
+                  前往 Google AI Studio 申請免費 Key ↗
+                </a>
+              </div>
+            </div>
           </div>
         </div>
 

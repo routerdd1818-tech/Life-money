@@ -184,6 +184,71 @@ function freeQuoteApiDevPlugin(): Plugin {
           res.end(JSON.stringify({ status: 200, items: [] }));
         }
       });
+
+      // 支援本地轉發 Google Gemini AI 分析 (/api/ai-analyze)
+      server.middlewares.use('/api/ai-analyze', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+          return;
+        }
+
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+
+        req.on('end', async () => {
+          try {
+            const parsed = body ? JSON.parse(body) : {};
+            const key =
+              parsed.userApiKey ||
+              process.env.GEMINI_API_KEY ||
+              process.env.VITE_GEMINI_API_KEY ||
+              '';
+
+            const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${key}`;
+            const prompt = `你現在是台灣頂尖證券自營部或避險基金的「首席量化操盤手」，專精結合基本面相對估值、籌碼流向與 ATR 波動率進行紀律交易。
+請針對以下個股量化數據與市場情報，進行深度、直率、無廢話的「實戰操盤決策分析」：
+標的：${parsed.stockId || ''} ${parsed.stockName || ''}，現價 NT$ ${parsed.price || ''} (${parsed.changePct || 0}%)
+關鍵價位：停損 NT$ ${parsed.ladder?.slPrice || 'N/A'}，TP1 NT$ ${parsed.ladder?.tp1Price || 'N/A'}，TP2 NT$ ${parsed.ladder?.tp2Price || 'N/A'}，TP3 NT$ ${parsed.ladder?.tp3Price || 'N/A'}
+同業估值：${parsed.valuation?.status || ''} (折溢價 ${parsed.valuation?.discountPremiumPct || 0}%)，同業中位數 PE: ${parsed.valuation?.peerMedianPe || 'N/A'}
+基本面：ROE ${parsed.fundamental?.roeRating || ''}，毛利護城河 ${parsed.fundamental?.marginMoat || ''}
+重大新聞摘要：${(parsed.news || []).slice(0, 3).map((n: any) => n.title).join(' / ') || '維持常態'}
+
+請分四大段：
+1. 【多空定調與核心結論】
+2. 【操盤手深度思路與攻防節奏】
+3. 【同業折溢價與基本面質化觀點】
+4. 【黑天鵝風險與避坑叮嚀】
+語氣務必乾脆專業，無廢話。`;
+
+            const gRes = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.7, maxOutputTokens: 1200 },
+              }),
+            });
+
+            if (!gRes.ok) {
+              const errBody = await gRes.text();
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ ok: false, fallback: true, error: errBody }));
+              return;
+            }
+
+            const data = (await gRes.json()) as any;
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: true, model: 'gemini-3.5-flash-lite', rawText: text }));
+          } catch (e: any) {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: false, fallback: true, error: e?.message }));
+          }
+        });
+      });
     },
   };
 }

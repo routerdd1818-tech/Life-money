@@ -1,0 +1,8 @@
+node_modules/
+pwa/dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.vercel/
+.DS_Store

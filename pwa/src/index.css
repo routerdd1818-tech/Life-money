@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', 'Inter', 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: #F6F7F9;
+    color: #191F28;
+    overflow-x: hidden;
+  }
+
+  .dark body {
+    background-color: #0E1116;
+    color: #F2F4F8;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .toss-card {
+    @apply bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.03)];
+  }
+
+  .toss-input {
+    @apply w-full px-3.5 py-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] border border-[#EAEDF2] dark:border-[#262C36] text-[#191F28] dark:text-[#F2F4F8] text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/25 focus:border-[#2563EB] transition-colors;
+  }
+
+  .toss-pill-bar {
+    @apply flex items-center gap-1 p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] overflow-x-auto no-scrollbar;
+  }
+
+  .toss-pill-btn {
+    @apply px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all;
+  }
+
+  .toss-pill-btn-active {
+    @apply bg-white dark:bg-[#161B22] text-[#191F28] dark:text-[#F2F4F8] shadow-sm;
+  }
+
+  .toss-pill-btn-inactive {
+    @apply text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] dark:hover:text-white;
+  }
+}

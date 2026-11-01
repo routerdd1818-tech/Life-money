@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- Toss FinTech 深邃皇家藍底板漸層 -->
+    <linearGradient id="vaultBg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="48%" stop-color="#1E3A8A" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+
+    <!-- 盾牌外框微光金屬質感 -->
+    <linearGradient id="shieldStroke" x1="120" y1="88" x2="392" y2="424" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#93C5FD" stop-opacity="0.9" />
+      <stop offset="50%" stop-color="#3B82F6" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#60A5FA" stop-opacity="0.85" />
+    </linearGradient>
+
+    <!-- 盾牌內部玻璃面板 -->
+    <linearGradient id="shieldGlass" x1="140" y1="100" x2="372" y2="412" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E293B" stop-opacity="0.88" />
+      <stop offset="100%" stop-color="#0F172A" stop-opacity="0.94" />
+    </linearGradient>
+
+    <!-- 量化階梯柱漸層 (冰川藍 -> 純白) -->
+    <linearGradient id="bar1" x1="176" y1="268" x2="176" y2="348" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="bar2" x1="244" y1="224" x2="244" y2="348" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#93C5FD" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </linearGradient>
+    <linearGradient id="bar3" x1="312" y1="168" x2="312" y2="348" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#93C5FD" />
+    </linearGradient>
+
+    <!-- 動能突破上升曲線 (翡翠綠 -> 亮青色) -->
+    <linearGradient id="alphaLine" x1="156" y1="264" x2="360" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+
+    <!-- 柔和環境光暈 -->
+    <radialGradient id="topGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 116) scale(220 160)">
+      <stop offset="0%" stop-color="#60A5FA" stop-opacity="0.32" />
+      <stop offset="100%" stop-color="#1E3A8A" stop-opacity="0" />
+    </radialGradient>
+
+    <filter id="softShadow" x="96" y="72" width="320" height="376" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#020617" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- 1. Apple iOS 規格圓角方塊底座 -->
+  <rect width="512" height="512" rx="116" fill="url(#vaultBg)" />
+  <rect width="512" height="512" rx="116" fill="url(#topGlow)" />
+
+  <!-- 內嵌極細高光邊框 -->
+  <rect x="6" y="6" width="500" height="500" rx="110" stroke="white" stroke-opacity="0.14" stroke-width="4" />
+
+  <!-- 2. 金庫與管家六角盾牌 (Vault & Butler Shield) -->
+  <g filter="url(#softShadow)">
+    <path
+      d="M256 84L388 136V254C388 338.5 331.8 404.2 256 428C180.2 404.2 124 338.5 124 254V136L256 84Z"
+      fill="url(#shieldGlass)"
+      stroke="url(#shieldStroke)"
+      stroke-width="7"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <!-- 盾牌內部微網格基準線 (Swiss Ledger Precision) -->
+  <line x1="162" y1="348" x2="350" y2="348" stroke="#334155" stroke-width="5" stroke-linecap="round" />
+
+  <!-- 3. 資產與量化三階成長柱 (账務 / 資產 / 選股) -->
+  <!-- 左柱：基礎記帳與現金流 -->
+  <rect x="174" y="264" width="36" height="84" rx="10" fill="url(#bar1)" />
+  <!-- 中柱：複利資產與債券配息 -->
+  <rect x="238" y="216" width="36" height="132" rx="10" fill="url(#bar2)" />
+  <!-- 右柱：量化選股與淨值創高 -->
+  <rect x="302" y="164" width="36" height="184" rx="10" fill="url(#bar3)" />
+
+  <!-- 4. Alpha 突破動能弧線與亮點 -->
+  <path
+    d="M168 238L232 192L272 212L346 138"
+    stroke="url(#alphaLine)"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- 箭頭翼 -->
+  <path
+    d="M312 138H346V172"
+    stroke="#34D399"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- 頂點雷達光點 -->
+  <circle cx="346" cy="138" r="10" fill="#ECFDF5" />
+</svg>

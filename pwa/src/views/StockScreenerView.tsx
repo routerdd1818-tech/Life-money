@@ -2,24 +2,17 @@ import React, { useMemo, useState } from 'react';
 import {
   Activity,
   ArrowRight,
-  Briefcase,
   CandlestickChart as CandlestickIcon,
   Check,
   ChevronRight,
-  Clock,
   Compass,
   Database,
   Eye,
   Flame,
-  Globe,
-  Grid,
-  Heart,
   Layers,
   Plus,
   RefreshCw,
   Search,
-  Shield,
-  SlidersHorizontal,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -32,14 +25,15 @@ import {
   calculateSectorFlowStats,
   evaluateBottomUpFunnel,
   QUANT_STRATEGIES,
-  STOCK_SECTORS,
 } from '../services/stockScreenerEngine';
-import { ScreenerFilterCriteria, ScreenerStockItem, StockSectorId, WatchlistType, WatchlistStockItem } from '../types';
-import { formatDataTimestamp } from '../utils/formatters';
 import {
-  evaluateMultiAgentVibe,
-  MultiAgentVibeAnalysis,
-} from '../services/multiSourceQuantEngine';
+  ScreenerFilterCriteria,
+  ScreenerStockItem,
+  StockSectorId,
+  WatchlistType,
+  WatchlistStockItem,
+} from '../types';
+import { formatDataTimestamp } from '../utils/formatters';
 import {
   searchTaiwanStockUniverse,
   resolveStockToScreenerItem,
@@ -53,8 +47,8 @@ import {
 } from '../services/industryUniverseService';
 import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
 
-type MainViewTab = 'watchlist' | 'industries' | 'screener' | 'sectors';
-type DetailTab = 'overview' | 'kline' | 'ai_report' | 'valuation';
+type MainTab = 'watchlist' | 'industries' | 'strategies';
+type ModalViewMode = 'kline' | 'ai_fundamental';
 
 interface UnifiedSearchItem {
   id: string;
@@ -82,40 +76,36 @@ export const StockScreenerView: React.FC = () => {
     isQuoteSyncing,
   } = useVault();
 
-  // 1. 核心頁籤與搜尋
-  const [activeTab, setActiveTab] = useState<MainViewTab>('watchlist');
+  // 1. 主頁籤與全域搜尋 (精簡為 3 大分頁)
+  const [activeTab, setActiveTab] = useState<MainTab>('watchlist');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isResolvingStock, setIsResolvingStock] = useState<string | null>(null);
 
-  // 2. 產業族群分類狀態 (涵蓋全台股 3,578 檔)
-  const [industryTabType, setIndustryTabType] = useState<'official' | 'concept'>('official');
-  const [selectedIndustryGroupId, setSelectedIndustryGroupId] = useState<string>('ind_semicon');
-  const [industrySearchQuery, setIndustrySearchQuery] = useState<string>('');
+  // 2. 產業族群分類狀態
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('ind_semicon');
+  const [groupSearchQuery, setGroupSearchQuery] = useState<string>('');
 
-  // 3. 策略選擇
+  // 3. 量化策略狀態
   const [activeStrategyId, setActiveStrategyId] = useState<string>('highest_win_rate_alpha');
   const [criteria, setCriteria] = useState<ScreenerFilterCriteria>(QUANT_STRATEGIES[0].criteria);
 
-  // 4. 板塊選中
-  const [selectedSectorId, setSelectedSectorId] = useState<StockSectorId>('ai_server_cooling');
-
-  // 5. 股票詳情底層抽屜狀態 (預設首頁為 'overview' 股票詳細資訊)
+  // 4. 股票詳情底層抽屜狀態 (直覺切換: K線走勢 vs AI深度決策)
   const [detailStock, setDetailStock] = useState<ScreenerStockItem | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>('overview');
-  const [detailVibeAnalysis, setDetailVibeAnalysis] = useState<MultiAgentVibeAnalysis | null>(null);
-  const [isVibeLoading, setIsVibeLoading] = useState<boolean>(false);
+  const [modalMode, setModalMode] = useState<ModalViewMode>('kline');
 
-  // 6. 全市場族群群組資料清單
-  const officialGroups = useMemo<IndustryGroupMeta[]>(() => getAllIndustryGroups(), []);
-  const conceptGroups = useMemo<IndustryGroupMeta[]>(() => getAllConceptGroups(), []);
-  const currentGroupList = industryTabType === 'official' ? officialGroups : conceptGroups;
+  // 5. 整合全市場官方產業與熱門概念群組 (以概念優先排序)
+  const allGroups = useMemo<IndustryGroupMeta[]>(() => {
+    const concepts = getAllConceptGroups();
+    const officials = getAllIndustryGroups();
+    return [...concepts, ...officials];
+  }, []);
 
-  // 7. 當前選中族群中的股票清單
-  const currentGroupStocks = useMemo<TaiwanStockBasicInfo[]>(() => {
-    return getStocksInGroup(selectedIndustryGroupId, industrySearchQuery, 100);
-  }, [selectedIndustryGroupId, industrySearchQuery]);
+  // 6. 當前族群內標的 (支援搜尋與快取)
+  const groupStocks = useMemo<TaiwanStockBasicInfo[]>(() => {
+    return getStocksInGroup(selectedGroupId, groupSearchQuery, 120);
+  }, [selectedGroupId, groupSearchQuery]);
 
-  // 8. 全局搜尋結果計算 (結合金庫已有標的與全台股 3,578 檔字典)
+  // 7. 全市場搜尋相符標的 (結合在庫標的與全台股 3,578 檔字典)
   const searchResults = useMemo<UnifiedSearchItem[]>(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
@@ -145,7 +135,7 @@ export const StockScreenerView: React.FC = () => {
       }
     }
 
-    const universe = searchTaiwanStockUniverse(q, 30);
+    const universe = searchTaiwanStockUniverse(q, 25);
     for (const u of universe) {
       const cleanId = u.id.toUpperCase();
       if (!seen.has(cleanId) && !seen.has(u.symbol.toUpperCase())) {
@@ -166,37 +156,30 @@ export const StockScreenerView: React.FC = () => {
     return results;
   }, [screenerStocks, searchQuery]);
 
-  // 9. 策略漏斗計算
+  // 8. 策略選股符合條件標的
   const { passedStocks } = useMemo(() => {
     return evaluateBottomUpFunnel(screenerStocks, criteria);
   }, [screenerStocks, criteria]);
 
-  // 10. 板塊熱度計算
-  const sectorFlowStats = useMemo(() => {
-    return calculateSectorFlowStats(screenerStocks);
-  }, [screenerStocks]);
-
-  // 11. 安全開啟個股詳細資訊抽屜 (保證 100% 成功解析並打開)
-  const handleSafeOpenStock = async (
+  // 9. 安全開啟股票詳情 (防空保底，保證 100% 成功滑出抽屜)
+  const handleOpenStock = async (
     item: ScreenerStockItem | UnifiedSearchItem | TaiwanStockBasicInfo | WatchlistStockItem
   ) => {
     let target: ScreenerStockItem | null = null;
 
-    // A. 若已是完整 ScreenerStockItem
     if ('sectorId' in item && 'price' in item && typeof (item as any).price === 'number') {
       target = item as ScreenerStockItem;
     } else {
       const rawSym = (item as any).symbol || (item as any).id || '';
       const cleanSym = String(rawSym).replace(/\.(TW|TWO)$/i, '').toUpperCase();
 
-      // B. 先從 screenerStocks 記憶體查找
       const existing = screenerStocks.find(
         (s) => s.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase() === cleanSym
       );
+
       if (existing) {
         target = existing;
       } else {
-        // C. 從 taiwanStockUniverse 查找並解析
         const matches = searchTaiwanStockUniverse(cleanSym, 1);
         const basic = matches[0];
         if (basic) {
@@ -211,7 +194,6 @@ export const StockScreenerView: React.FC = () => {
           }
         }
 
-        // D. 容錯保底構造完整標的物件
         if (!target) {
           const name = (item as any).name || cleanSym;
           const sector = (item as any).sector || (item as any).sectorName || '台股綜合';
@@ -226,24 +208,24 @@ export const StockScreenerView: React.FC = () => {
             price,
             dailyChangePct: 0,
             avgTurnover60dYiTwd: 1.2,
-            roePct: 14.5,
-            peRatio: 16.8,
+            roePct: 14.0,
+            peRatio: 16.5,
             pbRatio: 1.5,
             grossMarginPct: 22.0,
             freeCashFlowPositive: true,
-            dividendYieldPct: 3.8,
+            dividendYieldPct: 3.5,
             aboveMa60: true,
             aboveMa240: true,
-            momentum60dPct: 5.2,
-            annualVolatilityPct: 24.0,
+            momentum60dPct: 4.5,
+            annualVolatilityPct: 22.0,
             instNetBuy5dLots: 0,
             trustNetBuy5dLots: 0,
             majorHolderChangePct: 0,
             marginUtilizationHealth: 'healthy',
-            revenueYoYPct: 6.5,
-            revenueMoMPct: 1.2,
-            catalystNote: '產業供應鏈核心標的',
-            opmPct: 9.2,
+            revenueYoYPct: 5.0,
+            revenueMoMPct: 1.0,
+            catalystNote: '產業核心供應鏈',
+            opmPct: 8.5,
             estimatedEps: 2.8,
             atr14: Math.max(1, Math.round(price * 0.03 * 10) / 10),
           };
@@ -253,22 +235,24 @@ export const StockScreenerView: React.FC = () => {
     }
 
     setDetailStock(target);
-    setDetailTab('overview'); // 預設開啟股票詳細資訊
-
-    // 背景預載 Vibe 分析
-    setIsVibeLoading(true);
-    evaluateMultiAgentVibe(target, settings.finMindToken)
-      .then((res) => setDetailVibeAnalysis(res))
-      .catch(() => {})
-      .finally(() => setIsVibeLoading(false));
+    setModalMode('kline'); // 預設開啟 K 線走勢
   };
 
-  // 12. 自選清單操作
-  const isInWatchlist = (symbol: string) =>
-    watchlist.some((w) => w.symbol.toUpperCase() === symbol.toUpperCase());
+  // 10. 自選判斷 (防禦性檢查，避免 undefined throw error)
+  const isInWatchlist = (symbol?: string) => {
+    if (!symbol) return false;
+    const clean = symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
+    return watchlist.some(
+      (w) => w.symbol && w.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase() === clean
+    );
+  };
 
   const handleToggleWatchlist = (stock: ScreenerStockItem, listType: WatchlistType = 'watching') => {
-    const existing = watchlist.find((w) => w.symbol.toUpperCase() === stock.symbol.toUpperCase());
+    const clean = stock.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
+    const existing = watchlist.find(
+      (w) => w.symbol && w.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase() === clean
+    );
+
     if (existing) {
       deleteWatchlistItem(existing.id);
     } else {
@@ -314,10 +298,10 @@ export const StockScreenerView: React.FC = () => {
       lastQuotedAt: new Date().toISOString(),
       quoteSource: 'yahoo',
     });
-    alert(`已將 ${stock.name} (${unitsStr} 股) 加入投資組合持倉！`);
+    alert(`已將 ${stock.name} (${unitsStr} 股) 加入投資組合！`);
   };
 
-  // 13. 計算個股的同業估值與 ATR 風控線
+  // 11. 關鍵價位階梯
   const tradeLevels = useMemo<TradeLevelLine[]>(() => {
     if (!detailStock) return [];
     const p0 = detailStock.price;
@@ -336,67 +320,64 @@ export const StockScreenerView: React.FC = () => {
   }, [detailStock]);
 
   return (
-    <div className="space-y-3.5 pb-24 max-w-4xl mx-auto select-none">
-      {/* 頂部數據狀態與時間列 (工整精煉) */}
-      <div className="flex items-center justify-between px-1 text-[11px] text-[#8B95A1] tabular-nums">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[#4E5968] dark:text-[#9BA4B0]">
-            台股盤後與即時資料 ({formatDataTimestamp(settings.lastQuoteRefreshedAt)})
-          </span>
+    <div className="space-y-3 pb-24 max-w-3xl mx-auto select-none">
+      {/* 1. 頂部精簡搜尋列 (整合時間與即時刷新) */}
+      <section className="toss-card p-2.5 sm:p-3 space-y-2">
+        <div className="flex items-center justify-between text-[11px] text-[#8B95A1] px-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>台股即時資料 ({formatDataTimestamp(settings.lastQuoteRefreshedAt)})</span>
+          </div>
+          <button
+            type="button"
+            disabled={isQuoteSyncing}
+            onClick={() => void refreshQuotes()}
+            className="flex items-center gap-1 text-[#2563EB] hover:text-[#1D4ED8] font-semibold disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${isQuoteSyncing ? 'animate-spin' : ''}`} />
+            <span>{isQuoteSyncing ? '更新中' : '刷新'}</span>
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={isQuoteSyncing}
-          onClick={() => void refreshQuotes()}
-          className="flex items-center gap-1 text-[#2563EB] hover:text-[#1D4ED8] font-semibold disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isQuoteSyncing ? 'animate-spin' : ''}`} />
-          <span>{isQuoteSyncing ? '更新中' : '即刻刷新'}</span>
-        </button>
-      </div>
 
-      {/* 聚焦搜尋列 (Toss 現代灰階膠囊) */}
-      <section className="toss-card p-3 space-y-2.5">
+        {/* 搜尋框 */}
         <div className="relative flex items-center">
-          <Search className="w-4 h-4 text-[#8B95A1] absolute left-3.5 pointer-events-none" />
+          <Search className="w-4 h-4 text-[#8B95A1] absolute left-3 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜尋股票代號 (4526 / 2330 / 3017 / 0050) 或名稱..."
-            className="w-full pl-10 pr-9 py-2 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] text-xs sm:text-sm font-medium text-[#191F28] dark:text-[#F2F4F8] placeholder-[#8B95A1] border border-[#EAEDF2] dark:border-[#262C36] focus:border-[#2563EB] focus:outline-hidden transition-all"
+            placeholder="搜尋代號或名稱 (2330 / 4526 / 東台 / 散熱)..."
+            className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] text-xs sm:text-sm font-medium text-[#191F28] dark:text-[#F2F4F8] placeholder-[#8B95A1] border border-[#EAEDF2] dark:border-[#262C36] focus:border-[#2563EB] focus:outline-hidden"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 p-1 rounded-full text-[#8B95A1] hover:text-[#191F28] dark:hover:text-white"
+              className="absolute right-2.5 p-1 text-[#8B95A1] hover:text-[#191F28] dark:hover:text-white"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
-        {/* 熱門快捷標籤 */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-[11px]">
-          <span className="text-[#8B95A1] shrink-0 font-medium">熱搜：</span>
+        {/* 精簡熱搜膠囊 */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[11px]">
+          <span className="text-[#8B95A1] shrink-0 text-[10px]">熱搜：</span>
           {[
-            { label: '東台 4526', query: '4526' },
-            { label: '台積電 2330', query: '2330' },
-            { label: '奇鋐 3017', query: '3017' },
-            { label: '雙鴻 3324', query: '3324' },
-            { label: '廣達 2382', query: '2382' },
-            { label: '0050 元大', query: '0050' },
+            { label: '4526 東台', query: '4526' },
+            { label: '2330 台積電', query: '2330' },
+            { label: '3017 奇鋐', query: '3017' },
+            { label: '3324 雙鴻', query: '3324' },
+            { label: '2382 廣達', query: '2382' },
           ].map((tag) => (
             <button
               key={tag.query}
               type="button"
               onClick={() => setSearchQuery(tag.query)}
-              className={`px-2 py-0.8 rounded-lg border whitespace-nowrap transition-all ${
+              className={`px-2 py-0.5 rounded-md border text-[11px] whitespace-nowrap ${
                 searchQuery === tag.query
                   ? 'bg-[#2563EB] text-white border-[#2563EB] font-bold'
-                  : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] border-transparent hover:border-[#CBD5E1]'
+                  : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] border-transparent'
               }`}
             >
               {tag.label}
@@ -406,44 +387,37 @@ export const StockScreenerView: React.FC = () => {
 
         {/* 搜尋結果展開清單 */}
         {searchQuery.trim().length > 0 && (
-          <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] space-y-1.5">
-            <div className="flex items-center justify-between text-xs text-[#8B95A1] px-1">
-              <span>全市場相符標的 ({searchResults.length})</span>
+          <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-[#8B95A1] px-1">
+              <span>相符標的 ({searchResults.length})</span>
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="text-[11px] text-[#2563EB] hover:underline"
+                className="text-[#2563EB] hover:underline"
               >
-                收合搜尋
+                收合
               </button>
             </div>
 
             {searchResults.length === 0 ? (
-              <div className="p-6 text-center text-xs text-[#8B95A1]">
-                查無相符股票，請確認代碼或中文名稱
-              </div>
+              <div className="p-4 text-center text-xs text-[#8B95A1]">查無相符股票</div>
             ) : (
-              <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
                 {searchResults.map((item) => (
                   <div
                     key={item.symbol}
-                    onClick={() => void handleSafeOpenStock(item)}
-                    className="p-3 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] hover:bg-blue-50/50 dark:hover:bg-blue-950/20 border border-[#EAEDF2] dark:border-[#262C36] cursor-pointer transition-all flex items-center justify-between"
+                    onClick={() => void handleOpenStock(item)}
+                    className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] hover:bg-blue-50/50 dark:hover:bg-blue-950/20 border border-[#EAEDF2] dark:border-[#262C36] cursor-pointer transition-all flex items-center justify-between"
                   >
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
                           {item.name}
                         </span>
-                        <span className="text-xs font-mono text-[#8B95A1] font-semibold">
-                          {item.symbol}
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-[#4E5968] dark:text-[#9BA4B0]">
+                        <span className="text-xs font-mono text-[#8B95A1]">{item.symbol}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-slate-200/60 dark:bg-slate-800 text-[10px] text-[#4E5968] dark:text-[#9BA4B0]">
                           {item.sectorName}
                         </span>
-                      </div>
-                      <div className="text-[11px] text-[#8B95A1]">
-                        點擊查看行情資訊、移動 K 線與 AI 決策
                       </div>
                     </div>
 
@@ -451,13 +425,11 @@ export const StockScreenerView: React.FC = () => {
                       {item.stockItem && (
                         <div className="text-right tabular-nums">
                           <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                            NT$ {item.stockItem.price.toLocaleString()}
+                            NT$ {item.stockItem.price}
                           </div>
                           <div
-                            className={`text-xs font-bold ${
-                              item.stockItem.dailyChangePct >= 0
-                                ? 'text-[#F04452]'
-                                : 'text-[#059669]'
+                            className={`text-[10px] font-bold ${
+                              item.stockItem.dailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
                             }`}
                           >
                             {item.stockItem.dailyChangePct >= 0 ? '+' : ''}
@@ -475,14 +447,14 @@ export const StockScreenerView: React.FC = () => {
         )}
       </section>
 
-      {/* 四段式 Segmented Tab Bar (主流金融 App 核心) */}
-      <div className="flex p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-semibold">
+      {/* 2. 主分頁切換 (精簡收斂為 3 大分類) */}
+      <div className="flex p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-bold">
         <button
           type="button"
           onClick={() => setActiveTab('watchlist')}
-          className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1 ${
+          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
             activeTab === 'watchlist'
-              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs font-bold'
+              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
               : 'text-[#8B95A1] hover:text-[#4E5968]'
           }`}
         >
@@ -493,361 +465,278 @@ export const StockScreenerView: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('industries')}
-          className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1 ${
+          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
             activeTab === 'industries'
-              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs font-bold'
+              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
               : 'text-[#8B95A1] hover:text-[#4E5968]'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>產業族群 (全市場)</span>
+          <span>全市場族群 (3,578)</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab('screener')}
-          className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1 ${
-            activeTab === 'screener'
-              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs font-bold'
+          onClick={() => setActiveTab('strategies')}
+          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+            activeTab === 'strategies'
+              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
               : 'text-[#8B95A1] hover:text-[#4E5968]'
           }`}
         >
           <Compass className="w-3.5 h-3.5" />
           <span>策略選股</span>
         </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('sectors')}
-          className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1 ${
-            activeTab === 'sectors'
-              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs font-bold'
-              : 'text-[#8B95A1] hover:text-[#4E5968]'
-          }`}
-        >
-          <Flame className="w-3.5 h-3.5" />
-          <span>板塊熱度</span>
-        </button>
       </div>
 
       {/* ========================================================================= */}
-      {/* 視圖 1: 自選關注清單 (排版工整洗鍊，點擊 100% 展開個股詳情抽屜) */}
+      {/* 分頁 1: 自選關注清單 (極簡 Toss 規範排版) */}
       {/* ========================================================================= */}
       {activeTab === 'watchlist' && (
-        <section className="space-y-2">
+        <section className="space-y-1.5">
           {watchlist.length === 0 ? (
-            <div className="toss-card p-10 text-center space-y-3">
-              <Eye className="w-10 h-10 text-[#8B95A1] mx-auto opacity-40" />
+            <div className="toss-card p-10 text-center space-y-2.5">
+              <Eye className="w-8 h-8 text-[#8B95A1] mx-auto opacity-30" />
               <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                目前尚無自選關注股票
+                尚無自選關注標的
               </div>
               <p className="text-xs text-[#8B95A1]">
-                可於上方搜尋股票，或點切「產業族群」瀏覽全市場 3,578 檔標的加入自選
+                可搜尋股票或切換至「全市場族群」挑選心儀股票
               </p>
               <button
                 type="button"
                 onClick={() => setActiveTab('industries')}
-                className="px-4 py-2 rounded-xl bg-[#2563EB] text-white text-xs font-bold shadow-xs inline-flex items-center gap-1"
+                className="px-3.5 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-bold inline-flex items-center gap-1"
               >
-                <span>瀏覽全市場產業族群</span>
+                <span>瀏覽全市場族群</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {watchlist.map((item) => {
-                const stock = screenerStocks.find(
-                  (s) =>
-                    s.symbol === item.symbol ||
-                    s.symbol.replace(/\.(TW|TWO)$/i, '') === item.symbol.replace(/\.(TW|TWO)$/i, '')
-                );
-                const price = stock?.price ?? item.currentPrice;
-                const change = stock?.dailyChangePct ?? 0;
+            watchlist.map((item) => {
+              const stock = screenerStocks.find(
+                (s) =>
+                  s.symbol.replace(/\.(TW|TWO)$/i, '') === item.symbol.replace(/\.(TW|TWO)$/i, '')
+              );
+              const price = stock?.price ?? item.currentPrice;
+              const change = stock?.dailyChangePct ?? 0;
 
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => void handleSafeOpenStock(stock || item)}
-                    className="toss-card p-3.5 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
-                  >
-                    {/* 左側：股票名稱、代碼、族群與極簡亮點 */}
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[15px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
-                          {item.name}
-                        </span>
-                        <span className="text-xs font-mono font-semibold text-[#8B95A1]">
-                          {item.symbol}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-md bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#4E5968] dark:text-[#9BA4B0] font-medium">
-                          {item.sectorName || '台股'}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-[#8B95A1]">
-                        {stock
-                          ? `ROE ${stock.roePct}% · PE ${stock.peRatio}x · 毛利率 ${stock.grossMarginPct}%`
-                          : '點擊查看完整股票資訊、移動 K 線與 AI 決策'}
-                      </div>
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => void handleOpenStock(stock || item)}
+                  className="toss-card px-3.5 py-3 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[15px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
+                        {item.name}
+                      </span>
+                      <span className="text-xs font-mono font-medium text-[#8B95A1]">
+                        {item.symbol.replace(/\.(TW|TWO)$/i, '')}
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
+                        {item.sectorName}
+                      </span>
                     </div>
-
-                    {/* 右側：大字現價、漲跌幅膠囊與箭頭 */}
-                    <div className="flex items-center gap-3">
-                      <div className="text-right tabular-nums">
-                        <div className="text-base font-extrabold text-[#191F28] dark:text-white">
-                          NT$ {price.toLocaleString()}
-                        </div>
-                        <div
-                          className={`text-[11px] font-bold inline-block px-1.5 py-0.2 rounded-md ${
-                            change > 0
-                              ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
-                              : change < 0
-                                ? 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
-                                : 'bg-gray-100 text-[#8B95A1] dark:bg-gray-800'
-                          }`}
-                        >
-                          {change > 0 ? '+' : ''}
-                          {change}%
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB] transition-colors" />
+                    <div className="text-[11px] text-[#8B95A1]">
+                      {stock ? `ROE ${stock.roePct}% · PE ${stock.peRatio}x` : '自選追蹤標的'}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className="text-right tabular-nums">
+                      <div className="text-base font-bold text-[#191F28] dark:text-white">
+                        NT$ {price.toLocaleString()}
+                      </div>
+                      <div
+                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md inline-block ${
+                          change > 0
+                            ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
+                            : change < 0
+                              ? 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
+                              : 'bg-gray-100 text-[#8B95A1] dark:bg-gray-800'
+                        }`}
+                      >
+                        {change > 0 ? '+' : ''}
+                        {change}%
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB]" />
+                  </div>
+                </div>
+              );
+            })
           )}
         </section>
       )}
 
       {/* ========================================================================= */}
-      {/* 視圖 2: 產業族群專區 (涵蓋全台股 3,578 檔標的，官方 32 大類 + 8 大概念) */}
+      {/* 分頁 2: 全市場產業族群 (涵蓋 3,578 檔，流暢水平標籤 + 直覺清單) */}
       {/* ========================================================================= */}
       {activeTab === 'industries' && (
-        <section className="space-y-3">
-          {/* 族群大類切換器 (官方產業 vs 題材概念) */}
-          <div className="toss-card p-3 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
+        <section className="space-y-2.5">
+          {/* 水平滾動族群膠囊標籤 */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+            {allGroups.map((grp) => {
+              const isSelected = selectedGroupId === grp.id;
+              return (
                 <button
+                  key={grp.id}
                   type="button"
                   onClick={() => {
-                    setIndustryTabType('official');
-                    setSelectedIndustryGroupId(officialGroups[0]?.id || 'ind_semicon');
+                    setSelectedGroupId(grp.id);
+                    setGroupSearchQuery('');
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    industryTabType === 'official'
-                      ? 'bg-[#2563EB] text-white shadow-xs'
-                      : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0]'
+                  className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-[#191F28] text-white dark:bg-white dark:text-[#191F28] border-transparent font-bold shadow-xs'
+                      : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
                   }`}
                 >
-                  官方 32 大產業 (涵蓋全台股)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIndustryTabType('concept');
-                    setSelectedIndustryGroupId(conceptGroups[0]?.id || 'concept_ai_server');
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    industryTabType === 'concept'
-                      ? 'bg-[#2563EB] text-white shadow-xs'
-                      : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0]'
-                  }`}
-                >
-                  前瞻熱門題材概念
-                </button>
-              </div>
-
-              <span className="text-[11px] text-[#8B95A1] tabular-nums hidden sm:inline">
-                共收錄 3,578 檔上市櫃股票
-              </span>
-            </div>
-
-            {/* 水平滾動族群膠囊晶片清單 */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-              {currentGroupList.map((grp) => {
-                const isSelected = selectedIndustryGroupId === grp.id;
-                return (
-                  <button
-                    key={grp.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedIndustryGroupId(grp.id);
-                      setIndustrySearchQuery('');
-                    }}
-                    className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  <span>{grp.name}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                       isSelected
-                        ? 'bg-[#191F28] text-white dark:bg-white dark:text-[#191F28] border-transparent font-bold shadow-xs'
-                        : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
+                        ? 'bg-white/20 text-white dark:bg-black/10 dark:text-black font-bold'
+                        : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#8B95A1]'
                     }`}
                   >
-                    <span>{grp.name}</span>
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                        isSelected
-                          ? 'bg-white/20 text-white dark:bg-black/10 dark:text-black font-bold'
-                          : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#8B95A1]'
-                      }`}
-                    >
-                      {grp.stockCount}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* 族群內關鍵字快搜 */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-[#8B95A1] absolute left-3 top-2.5 pointer-events-none" />
-              <input
-                type="text"
-                value={industrySearchQuery}
-                onChange={(e) => setIndustrySearchQuery(e.target.value)}
-                placeholder="在此族群中搜尋代號或名稱 (如 2330, 東台)..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#F6F7F9] dark:bg-[#1F2631] text-xs text-[#191F28] dark:text-[#F2F4F8] placeholder-[#8B95A1] border border-[#EAEDF2] dark:border-[#262C36] focus:outline-hidden"
-              />
-            </div>
+                    {grp.stockCount}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* 該族群內的標的列表 */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-[#8B95A1] px-1">
-              <span>
-                {currentGroupList.find((g) => g.id === selectedIndustryGroupId)?.name} · 列表 (
-                {currentGroupStocks.length} 檔)
-              </span>
-              <span>點擊開啟股票資訊與 K 線</span>
-            </div>
+          {/* 族群內關鍵字快搜 */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-[#8B95A1] absolute left-3 top-2.5 pointer-events-none" />
+            <input
+              type="text"
+              value={groupSearchQuery}
+              onChange={(e) => setGroupSearchQuery(e.target.value)}
+              placeholder="在此族群快速搜尋股票代號或名稱..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[#F6F7F9] dark:bg-[#1F2631] text-xs text-[#191F28] dark:text-[#F2F4F8] placeholder-[#8B95A1] border border-[#EAEDF2] dark:border-[#262C36] focus:outline-hidden"
+            />
+          </div>
 
-            {currentGroupStocks.length === 0 ? (
-              <div className="toss-card p-8 text-center text-xs text-[#8B95A1]">
-                該族群中查無相符標的
+          {/* 族群標的列表 */}
+          <div className="space-y-1.5">
+            {groupStocks.length === 0 ? (
+              <div className="toss-card p-6 text-center text-xs text-[#8B95A1]">
+                查無相符股票
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {currentGroupStocks.map((stock) => {
-                  const screenerStock = screenerStocks.find(
-                    (s) => s.symbol.replace(/\.(TW|TWO)$/i, '') === stock.id
-                  );
-                  const watched = isInWatchlist(stock.symbol);
+              groupStocks.map((stock) => {
+                const screenerStock = screenerStocks.find(
+                  (s) => s.symbol.replace(/\.(TW|TWO)$/i, '') === stock.id
+                );
 
-                  return (
-                    <div
-                      key={stock.id}
-                      onClick={() => void handleSafeOpenStock(screenerStock || stock)}
-                      className="toss-card p-3 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
-                            {stock.name}
-                          </span>
-                          <span className="text-xs font-mono font-semibold text-[#8B95A1]">
-                            {stock.id}
-                          </span>
-                          <span className="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[9px] text-[#8B95A1]">
-                            {stock.market}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-[#8B95A1] line-clamp-1">
-                          {stock.sector}
-                        </div>
+                return (
+                  <div
+                    key={stock.id}
+                    onClick={() => void handleOpenStock(screenerStock || stock)}
+                    className="toss-card px-3.5 py-2.5 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[14px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
+                          {stock.name}
+                        </span>
+                        <span className="text-xs font-mono font-medium text-[#8B95A1]">
+                          {stock.id}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[9px] text-[#8B95A1]">
+                          {stock.market}
+                        </span>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        {screenerStock ? (
-                          <div className="text-right tabular-nums">
-                            <div className="text-sm font-bold text-[#191F28] dark:text-white">
-                              NT$ {screenerStock.price}
-                            </div>
-                            <div
-                              className={`text-[10px] font-bold ${
-                                screenerStock.dailyChangePct >= 0
-                                  ? 'text-[#F04452]'
-                                  : 'text-[#059669]'
-                              }`}
-                            >
-                              {screenerStock.dailyChangePct >= 0 ? '+' : ''}
-                              {screenerStock.dailyChangePct}%
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] font-medium text-[#2563EB] group-hover:underline">
-                            查看資訊 ↗
-                          </span>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB]" />
-                      </div>
+                      <div className="text-[10px] text-[#8B95A1]">{stock.sector}</div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="flex items-center gap-2">
+                      {screenerStock ? (
+                        <div className="text-right tabular-nums">
+                          <div className="text-sm font-bold text-[#191F28] dark:text-white">
+                            NT$ {screenerStock.price}
+                          </div>
+                          <div
+                            className={`text-[10px] font-bold ${
+                              screenerStock.dailyChangePct >= 0
+                                ? 'text-[#F04452]'
+                                : 'text-[#059669]'
+                            }`}
+                          >
+                            {screenerStock.dailyChangePct >= 0 ? '+' : ''}
+                            {screenerStock.dailyChangePct}%
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#2563EB] group-hover:underline">
+                          查看 ↗
+                        </span>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-[#8B95A1] group-hover:text-[#2563EB]" />
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </section>
       )}
 
       {/* ========================================================================= */}
-      {/* 視圖 3: 策略選股 (量化篩選漏斗) */}
+      {/* 分頁 3: 策略選股 (精選量化策略與符合條件名單) */}
       {/* ========================================================================= */}
-      {activeTab === 'screener' && (
-        <section className="space-y-3">
-          {/* 策略切換膠囊 */}
-          <div className="toss-card p-3 space-y-2">
-            <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
-              精選實戰量化策略
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
-              {QUANT_STRATEGIES.map((strat) => (
-                <button
-                  key={strat.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveStrategyId(strat.id);
-                    setCriteria(strat.criteria);
-                  }}
-                  className={`p-2 rounded-xl text-left border transition-all ${
-                    activeStrategyId === strat.id
-                      ? 'bg-blue-50/60 dark:bg-blue-950/30 border-[#2563EB] text-[#2563EB] font-bold shadow-2xs'
-                      : 'bg-[#F6F7F9] dark:bg-[#1F2631] border-transparent text-[#4E5968] dark:text-[#9BA4B0]'
-                  }`}
-                >
-                  <div className="font-bold text-xs">{strat.name}</div>
-                  <div className="text-[10px] text-[#8B95A1] mt-0.5 line-clamp-1">
-                    {strat.summary}
-                  </div>
-                </button>
-              ))}
-            </div>
+      {activeTab === 'strategies' && (
+        <section className="space-y-2.5">
+          {/* 策略膠囊選擇器 */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+            {QUANT_STRATEGIES.map((strat) => (
+              <button
+                key={strat.id}
+                type="button"
+                onClick={() => {
+                  setActiveStrategyId(strat.id);
+                  setCriteria(strat.criteria);
+                }}
+                className={`p-2 rounded-xl text-left border transition-all ${
+                  activeStrategyId === strat.id
+                    ? 'bg-blue-50/60 dark:bg-blue-950/30 border-[#2563EB] text-[#2563EB] font-bold shadow-2xs'
+                    : 'bg-[#F6F7F9] dark:bg-[#1F2631] border-transparent text-[#4E5968] dark:text-[#9BA4B0]'
+                }`}
+              >
+                <div className="font-bold text-xs">{strat.name}</div>
+                <div className="text-[10px] text-[#8B95A1] mt-0.5 line-clamp-1">
+                  {strat.summary}
+                </div>
+              </button>
+            ))}
           </div>
 
-          {/* 策略入選標的列表 */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-[#8B95A1] px-1">
-              <span>策略符合條件標的 ({passedStocks.length} 檔)</span>
-              <span>點擊查看完整股票資訊</span>
-            </div>
-
+          {/* 入選標的清單 */}
+          <div className="space-y-1.5">
             {passedStocks.length === 0 ? (
-              <div className="toss-card p-8 text-center text-xs text-[#8B95A1]">
-                目前無標的完全符合此策略條件，可放寬篩選標準
+              <div className="toss-card p-6 text-center text-xs text-[#8B95A1]">
+                目前無標的完全符合此策略條件
               </div>
             ) : (
               passedStocks.map((stock) => (
                 <div
                   key={stock.symbol}
-                  onClick={() => void handleSafeOpenStock(stock)}
-                  className="toss-card p-3.5 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
+                  onClick={() => void handleOpenStock(stock)}
+                  className="toss-card px-3.5 py-3 cursor-pointer hover:border-[#2563EB]/40 transition-all flex items-center justify-between group"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
                       <span className="text-[15px] font-bold text-[#191F28] dark:text-[#F2F4F8] group-hover:text-[#2563EB] transition-colors">
                         {stock.name}
                       </span>
-                      <span className="text-xs font-mono font-semibold text-[#8B95A1]">
-                        {stock.symbol}
+                      <span className="text-xs font-mono font-medium text-[#8B95A1]">
+                        {stock.symbol.replace(/\.(TW|TWO)$/i, '')}
                       </span>
-                      <span className="px-2 py-0.5 rounded-md bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#4E5968] dark:text-[#9BA4B0] font-medium">
+                      <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
                         {stock.sectorName}
                       </span>
                     </div>
@@ -856,13 +745,13 @@ export const StockScreenerView: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     <div className="text-right tabular-nums">
-                      <div className="text-base font-extrabold text-[#191F28] dark:text-white">
+                      <div className="text-base font-bold text-[#191F28] dark:text-white">
                         NT$ {stock.price.toLocaleString()}
                       </div>
                       <div
-                        className={`text-[11px] font-bold inline-block px-1.5 py-0.2 rounded-md ${
+                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md inline-block ${
                           stock.dailyChangePct >= 0
                             ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
                             : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
@@ -882,332 +771,84 @@ export const StockScreenerView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 視圖 4: 板塊熱度 (資金輪動熱力方塊) */}
-      {/* ========================================================================= */}
-      {activeTab === 'sectors' && (
-        <section className="space-y-3">
-          <div className="toss-card p-3.5 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-[#191F28] dark:text-[#F2F4F8]">
-                板塊資金輪動方塊熱圖
-              </span>
-              <span className="text-[11px] text-[#8B95A1]">點擊方塊檢視成分股</span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {sectorFlowStats.map((sec) => (
-                <div
-                  key={sec.sectorId}
-                  onClick={() => setSelectedSectorId(sec.sectorId)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                    selectedSectorId === sec.sectorId
-                      ? 'border-[#2563EB] ring-2 ring-[#2563EB]/20 bg-blue-50/40 dark:bg-blue-950/20'
-                      : 'border-[#EAEDF2] dark:border-[#262C36] bg-white dark:bg-[#161B22]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                    <span>{sec.name}</span>
-                    <span
-                      className={`tabular-nums ${
-                        sec.avgDailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                      }`}
-                    >
-                      {sec.avgDailyChangePct >= 0 ? '+' : ''}
-                      {sec.avgDailyChangePct}%
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-[#8B95A1] mt-1 flex items-center justify-between">
-                    <span>成交比重 {sec.turnoverSharePct}%</span>
-                    <span>{sec.stockCount} 檔</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 個股詳情底層抽屜 (Bottom Sheet Modal) —— 股票資訊 / K線 / AI決策 / 同業估值 */}
+      {/* 個股詳情底層抽屜 (一目了然: 首頁即可滑動 K 線 + 雙切換模式) */}
       {/* ========================================================================= */}
       {detailStock && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full sm:max-w-2xl max-h-[92vh] bg-white dark:bg-[#0E1116] rounded-t-3xl sm:rounded-3xl border border-[#EAEDF2] dark:border-[#262C36] shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom duration-200">
-            {/* 抽屜頂部標題列 */}
-            <div className="p-4 border-b border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-black text-[#191F28] dark:text-white">
-                      {detailStock.name}
-                    </h2>
-                    <span className="text-xs font-mono font-bold text-[#8B95A1]">
-                      {detailStock.symbol}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#4E5968] dark:text-[#9BA4B0] font-semibold">
-                      {detailStock.sectorName}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5 tabular-nums">
-                    <span className="text-xl font-black text-[#191F28] dark:text-white">
-                      NT$ {detailStock.price.toLocaleString()}
-                    </span>
-                    <span
-                      className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                        detailStock.dailyChangePct >= 0
-                          ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
-                          : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
-                      }`}
-                    >
-                      {detailStock.dailyChangePct >= 0 ? '+' : ''}
-                      {detailStock.dailyChangePct}%
-                    </span>
-                  </div>
+          <div className="w-full sm:max-w-xl max-h-[92vh] bg-white dark:bg-[#0E1116] rounded-t-3xl sm:rounded-3xl border border-[#EAEDF2] dark:border-[#262C36] shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom duration-200">
+            {/* 抽屜頂部標題 */}
+            <div className="px-4 py-3 border-b border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-[#191F28] dark:text-white">
+                    {detailStock.name}
+                  </h2>
+                  <span className="text-xs font-mono text-[#8B95A1] font-semibold">
+                    {detailStock.symbol}
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#4E5968] dark:text-[#9BA4B0]">
+                    {detailStock.sectorName}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2 mt-0.5 tabular-nums">
+                  <span className="text-xl font-black text-[#191F28] dark:text-white">
+                    NT$ {detailStock.price.toLocaleString()}
+                  </span>
+                  <span
+                    className={`text-xs font-bold px-1.5 py-0.2 rounded ${
+                      detailStock.dailyChangePct >= 0
+                        ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
+                        : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
+                    }`}
+                  >
+                    {detailStock.dailyChangePct >= 0 ? '+' : ''}
+                    {detailStock.dailyChangePct}%
+                  </span>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setDetailStock(null)}
-                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8B95A1] transition-colors"
+                className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8B95A1]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* 抽屜四頁籤導航列 (股票資訊 / 移動K線 / AI深度決策 / 同業估值) */}
-            <div className="flex border-b border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#161B22] text-xs font-bold px-2 pt-1 gap-1 overflow-x-auto no-scrollbar">
+            {/* 雙切換分頁標籤 (K 線走勢 vs AI 深度決策) */}
+            <div className="flex border-b border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#161B22] text-xs font-bold px-2 pt-1 gap-1">
               <button
                 type="button"
-                onClick={() => setDetailTab('overview')}
-                className={`py-2.5 px-3 rounded-t-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                  detailTab === 'overview'
+                onClick={() => setModalMode('kline')}
+                className={`flex-1 py-2 rounded-t-lg transition-all flex items-center justify-center gap-1.5 ${
+                  modalMode === 'kline'
                     ? 'bg-white dark:bg-[#0E1116] text-[#2563EB] border-t-2 border-[#2563EB] shadow-2xs'
-                    : 'text-[#8B95A1] hover:text-[#191F28]'
-                }`}
-              >
-                <Database className="w-3.5 h-3.5" />
-                <span>📊 股票詳細資訊</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDetailTab('kline')}
-                className={`py-2.5 px-3 rounded-t-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                  detailTab === 'kline'
-                    ? 'bg-white dark:bg-[#0E1116] text-[#2563EB] border-t-2 border-[#2563EB] shadow-2xs'
-                    : 'text-[#8B95A1] hover:text-[#191F28]'
+                    : 'text-[#8B95A1]'
                 }`}
               >
                 <CandlestickIcon className="w-3.5 h-3.5" />
-                <span>📈 移動日 K 線</span>
+                <span>📈 日 K 線走勢與點位</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setDetailTab('ai_report')}
-                className={`py-2.5 px-3 rounded-t-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                  detailTab === 'ai_report'
+                onClick={() => setModalMode('ai_fundamental')}
+                className={`flex-1 py-2 rounded-t-lg transition-all flex items-center justify-center gap-1.5 ${
+                  modalMode === 'ai_fundamental'
                     ? 'bg-white dark:bg-[#0E1116] text-[#2563EB] border-t-2 border-[#2563EB] shadow-2xs'
-                    : 'text-[#8B95A1] hover:text-[#191F28]'
+                    : 'text-[#8B95A1]'
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>🧠 AI 深度決策</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDetailTab('valuation')}
-                className={`py-2.5 px-3 rounded-t-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                  detailTab === 'valuation'
-                    ? 'bg-white dark:bg-[#0E1116] text-[#2563EB] border-t-2 border-[#2563EB] shadow-2xs'
-                    : 'text-[#8B95A1] hover:text-[#191F28]'
-                }`}
-              >
-                <Compass className="w-3.5 h-3.5" />
-                <span>🧭 同業估值</span>
+                <span>🧠 AI 決策與基本面</span>
               </button>
             </div>
 
-            {/* 抽屜可滾動主內容 */}
-            <div className="p-4 overflow-y-auto space-y-4 flex-1">
-              {/* ========================================================= */}
-              {/* 子頁籤 1: 股票詳細資訊 (即時開高低收 + 關鍵財務與籌碼指標) */}
-              {/* ========================================================= */}
-              {detailTab === 'overview' && (
-                <div className="space-y-3.5 text-xs">
-                  {/* 今日行情開高低收數據網格 */}
-                  <div className="toss-card p-3.5 space-y-2">
-                    <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8] flex items-center justify-between">
-                      <span>即時行情與盤後數據</span>
-                      <span className="text-[10px] text-[#8B95A1]">台灣證券交易所 / 櫃買中心</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 tabular-nums">
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">今日開盤</div>
-                        <div className="text-sm font-bold text-[#191F28] dark:text-white">
-                          NT$ {detailStock.price}
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">最高價</div>
-                        <div className="text-sm font-bold text-[#F04452]">
-                          NT$ {Math.round(detailStock.price * 1.025 * 10) / 10}
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">最低價</div>
-                        <div className="text-sm font-bold text-[#059669]">
-                          NT$ {Math.round(detailStock.price * 0.985 * 10) / 10}
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">ATR (14日波幅)</div>
-                        <div className="text-sm font-bold text-[#2563EB]">
-                          {detailStock.atr14 || 1.2} 元
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 核心基本面 8 大指標卡 */}
-                  <div className="toss-card p-3.5 space-y-2.5">
-                    <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                      核心財務與估值特徵
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 tabular-nums">
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">本益比 P/E</div>
-                        <div className="text-sm font-bold text-[#191F28] dark:text-white">
-                          {detailStock.peRatio} 倍
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">股價淨值比 P/B</div>
-                        <div className="text-sm font-bold text-[#191F28] dark:text-white">
-                          {detailStock.pbRatio} 倍
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">ROE 股東權益報酬</div>
-                        <div className="text-sm font-bold text-[#2563EB]">
-                          {detailStock.roePct}%
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">現金殖利率</div>
-                        <div className="text-sm font-bold text-[#059669]">
-                          {detailStock.dividendYieldPct}%
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">營業毛利率</div>
-                        <div className="text-sm font-bold text-[#191F28] dark:text-white">
-                          {detailStock.grossMarginPct}%
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">營業利益率 OPM</div>
-                        <div className="text-sm font-bold text-[#191F28] dark:text-white">
-                          {detailStock.opmPct || 8.5}%
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">單月營收 YoY</div>
-                        <div
-                          className={`text-sm font-bold ${
-                            detailStock.revenueYoYPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }`}
-                        >
-                          {detailStock.revenueYoYPct >= 0 ? '+' : ''}
-                          {detailStock.revenueYoYPct}%
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">自由現金流</div>
-                        <div className="text-sm font-bold text-emerald-600">
-                          {detailStock.freeCashFlowPositive ? '正向流入' : '需關注'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 三大法人籌碼與均線動能 */}
-                  <div className="toss-card p-3.5 space-y-2">
-                    <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                      三大法人籌碼與動能位階
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 tabular-nums">
-                      <div className="p-2 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">法人近 5 日買賣超</div>
-                        <div
-                          className={`text-xs font-bold ${
-                            detailStock.instNetBuy5dLots >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }`}
-                        >
-                          {detailStock.instNetBuy5dLots >= 0 ? '+' : ''}
-                          {detailStock.instNetBuy5dLots} 張
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">投信近 5 日買賣超</div>
-                        <div
-                          className={`text-xs font-bold ${
-                            detailStock.trustNetBuy5dLots >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }`}
-                        >
-                          {detailStock.trustNetBuy5dLots >= 0 ? '+' : ''}
-                          {detailStock.trustNetBuy5dLots} 張
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">60MA 季線位階</div>
-                        <div className="text-xs font-bold text-emerald-600">
-                          {detailStock.aboveMa60 ? '季線上方 (多頭)' : '季線下方 (整理)'}
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631]">
-                        <div className="text-[10px] text-[#8B95A1]">近 60 日動能</div>
-                        <div
-                          className={`text-xs font-bold ${
-                            detailStock.momentum60dPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }`}
-                        >
-                          {detailStock.momentum60dPct >= 0 ? '+' : ''}
-                          {detailStock.momentum60dPct}%
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 快捷引導至 K 線與 AI 決策 */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setDetailTab('kline')}
-                      className="flex-1 py-2.5 rounded-xl bg-[#2563EB] text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5"
-                    >
-                      <CandlestickIcon className="w-4 h-4" />
-                      <span>查看可滑動日 K 線圖</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDetailTab('ai_report')}
-                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      <span>查看 Gemini 操盤決策</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ========================================================= */}
-              {/* 子頁籤 2: 移動日 K 線 (支援手勢觸控左右平移滑動與縮放) */}
-              {/* ========================================================= */}
-              {detailTab === 'kline' && (
+            {/* 可滾動內容主體 */}
+            <div className="p-3.5 overflow-y-auto space-y-3 flex-1 text-xs">
+              {/* 模式 1: 日 K 線圖 (手勢左右滑動平移) + ATR 關鍵點位梯形 */}
+              {modalMode === 'kline' && (
                 <div className="space-y-3">
                   <CandlestickChart
                     symbol={detailStock.symbol}
@@ -1215,69 +856,82 @@ export const StockScreenerView: React.FC = () => {
                     currentPrice={detailStock.price}
                     token={settings.finMindToken}
                     tradeLevels={tradeLevels}
-                    height={320}
+                    height={300}
                   />
 
                   {/* 關鍵價位階梯看板 */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center tabular-nums text-xs">
-                    <div className="p-2.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50">
-                      <div className="text-[10px] text-rose-600 font-bold">SL 停損價 (2 ATR)</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center tabular-nums">
+                    <div className="p-2 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50">
+                      <div className="text-[10px] text-rose-600 font-bold">SL 停損 (2 ATR)</div>
                       <div className="text-sm font-extrabold text-[#F04452]">
                         NT$ {tradeLevels[0]?.price}
                       </div>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50">
+                    <div className="p-2 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50">
                       <div className="text-[10px] text-emerald-600 font-bold">TP1 保本止盈</div>
                       <div className="text-sm font-extrabold text-[#059669]">
                         NT$ {tradeLevels[1]?.price}
                       </div>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50">
+                    <div className="p-2 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50">
                       <div className="text-[10px] text-blue-600 font-bold">TP2 同業合理價</div>
                       <div className="text-sm font-extrabold text-[#2563EB]">
                         NT$ {tradeLevels[2]?.price}
                       </div>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/50">
+                    <div className="p-2 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/50">
                       <div className="text-[10px] text-purple-600 font-bold">TP3 龍頭極值</div>
                       <div className="text-sm font-extrabold text-[#8B5CF6]">
                         NT$ {tradeLevels[3]?.price}
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* ========================================================= */}
-              {/* 子頁籤 3: AI 深度決策 (Gemini 3.5 操盤手觀點 + 風控梯形) */}
-              {/* ========================================================= */}
-              {detailTab === 'ai_report' && (
-                <AIAnalysisReportView stock={detailStock} allStocks={screenerStocks} />
-              )}
-
-              {/* ========================================================= */}
-              {/* 子頁籤 4: 同業相對估值 */}
-              {/* ========================================================= */}
-              {detailTab === 'valuation' && (
-                <div className="space-y-3 text-xs">
-                  <div className="toss-card p-3.5 space-y-2">
-                    <div className="font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                      同業相對估值定錨模型
+                  {/* 快速財務指標總結 */}
+                  <div className="p-3 rounded-xl bg-[#F6F7F9] dark:bg-[#161B22] grid grid-cols-4 gap-2 text-center tabular-nums text-[11px]">
+                    <div>
+                      <div className="text-[#8B95A1]">P/E 本益比</div>
+                      <div className="font-bold text-[#191F28] dark:text-white mt-0.5">
+                        {detailStock.peRatio}x
+                      </div>
                     </div>
-                    <p className="text-xs text-[#4E5968] dark:text-[#9BA4B0] leading-relaxed">
-                      透過同產業中位數本益比，推導個股公允基本面目標價 (TP2 = NT$ {tradeLevels[2]?.price})。若股價跌破 $SL = NT$ {tradeLevels[0]?.price} (2 ATR 防守線)，即觸發嚴格風控紀律停損。
-                    </p>
+                    <div>
+                      <div className="text-[#8B95A1]">P/B 淨值比</div>
+                      <div className="font-bold text-[#191F28] dark:text-white mt-0.5">
+                        {detailStock.pbRatio}x
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[#8B95A1]">ROE 報酬率</div>
+                      <div className="font-bold text-[#2563EB] mt-0.5">{detailStock.roePct}%</div>
+                    </div>
+                    <div>
+                      <div className="text-[#8B95A1]">營收 YoY</div>
+                      <div
+                        className={`font-bold mt-0.5 ${
+                          detailStock.revenueYoYPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                        }`}
+                      >
+                        {detailStock.revenueYoYPct >= 0 ? '+' : ''}
+                        {detailStock.revenueYoYPct}%
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
+
+              {/* 模式 2: AI 決策與基本面深度診斷 */}
+              {modalMode === 'ai_fundamental' && (
+                <AIAnalysisReportView stock={detailStock} allStocks={screenerStocks} />
               )}
             </div>
 
             {/* 抽屜底部動作列 (加入自選 / 轉入持倉) */}
-            <div className="p-3.5 border-t border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#161B22] flex items-center justify-end gap-2">
+            <div className="p-3 border-t border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#161B22] flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => handleToggleWatchlist(detailStock, 'watching')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
                   isInWatchlist(detailStock.symbol)
                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
                     : 'bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#191F28] dark:text-white'

@@ -254,9 +254,21 @@ export const OFFICIAL_INDUSTRY_GROUPS: Array<{
   },
 ];
 
-// 將全體 3,578 檔標的依官方分類預先歸組
+// 將全體 3,578 檔標的依官方分類預先歸組 (補齊標準 symbol: 如 4526.TW)
+const allStocksUniverse: TaiwanStockBasicInfo[] = (universeData as Array<{
+  id: string;
+  name: string;
+  sector: string;
+  market: 'TWSE' | 'TPEx';
+}>).map((item) => ({
+  id: item.id,
+  name: item.name,
+  sector: item.sector || '其他',
+  market: item.market || 'TWSE',
+  symbol: `${item.id}.${item.market === 'TPEx' ? 'TWO' : 'TW'}`,
+}));
+
 const groupedOfficialStocks: Record<string, TaiwanStockBasicInfo[]> = {};
-const allStocksUniverse: TaiwanStockBasicInfo[] = universeData as TaiwanStockBasicInfo[];
 
 // 初始化分類桶
 OFFICIAL_INDUSTRY_GROUPS.forEach((g) => {

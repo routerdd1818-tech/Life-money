@@ -1,4 +1,30 @@
-import { DividendFrequency, InvestmentCategory, QuoteCurrency, SecurityHolding } from '../types';
+import {
+  DividendFrequency,
+  ExchangeRatesTable,
+  InvestmentCategory,
+  QuoteCurrency,
+  SecurityHolding,
+  SupportedCurrency,
+} from '../types';
+
+export const CURRENCY_META: Record<SupportedCurrency, { name: string; symbol: string; flag: string }> = {
+  TWD: { name: '新台幣', symbol: 'NT$', flag: '🇹🇼' },
+  USD: { name: '美元', symbol: '$', flag: '🇺🇸' },
+  JPY: { name: '日幣', symbol: '¥', flag: '🇯🇵' },
+  CNY: { name: '人民幣', symbol: '¥', flag: '🇨🇳' },
+  KRW: { name: '韓元', symbol: '₩', flag: '🇰🇷' },
+  VND: { name: '越南盾', symbol: '₫', flag: '🇻🇳' },
+};
+
+export const DEFAULT_EXCHANGE_RATES: ExchangeRatesTable = {
+  USD: 32.25,
+  JPY: 0.215,
+  CNY: 4.45,
+  KRW: 0.0235,
+  VND: 0.00128,
+  TWD: 1,
+  updatedAt: new Date().toISOString(),
+};
 
 export interface SecurityPreset {
   symbol: string;
@@ -223,6 +249,7 @@ export const SECURITY_PRESETS: SecurityPreset[] = [
 
 interface ApiQuotesResponse {
   exchangeRateUsdTwd: number;
+  exchangeRates?: ExchangeRatesTable;
   quotes: Record<
     string,
     {
@@ -237,6 +264,50 @@ interface ApiQuotesResponse {
     }
   >;
   fetchedAt: string;
+}
+
+export async function fetchLatestExchangeRates(
+  currentRates: ExchangeRatesTable = DEFAULT_EXCHANGE_RATES
+): Promise<ExchangeRatesTable> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch('/api/quotes?symbols=USDTWD=X', {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json()) as ApiQuotesResponse;
+      if (data.exchangeRates) {
+        return data.exchangeRates;
+      }
+    }
+  } catch {
+    // fallback to open.er-api.com
+    try {
+      const rRes = await fetch('https://open.er-api.com/v6/latest/USD');
+      if (rRes.ok) {
+        const rData = (await rRes.json()) as { rates?: Record<string, number> };
+        const r = rData?.rates;
+        if (r && typeof r.TWD === 'number') {
+          const twd = r.TWD;
+          return {
+            USD: Math.round(twd * 100) / 100,
+            JPY: r.JPY ? Math.round((twd / r.JPY) * 10000) / 10000 : currentRates.JPY,
+            CNY: r.CNY ? Math.round((twd / r.CNY) * 1000) / 1000 : currentRates.CNY,
+            KRW: r.KRW ? Math.round((twd / r.KRW) * 10000) / 10000 : currentRates.KRW,
+            VND: r.VND ? Math.round((twd / r.VND) * 100000) / 100000 : currentRates.VND,
+            TWD: 1,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      }
+    } catch {
+      // keep
+    }
+  }
+
+  return currentRates;
 }
 
 /**
@@ -289,10 +360,12 @@ export function findSecurityPreset(rawSymbol: string): SecurityPreset | undefine
  */
 export async function syncAllHoldingsQuotes(
   holdings: SecurityHolding[],
-  currentUsdTwdRate: number
-): Promise<{ updatedHoldings: SecurityHolding[]; exchangeRateUsdTwd: number }> {
+  currentUsdTwdRate: number,
+  currentRates?: ExchangeRatesTable
+): Promise<{ updatedHoldings: SecurityHolding[]; exchangeRateUsdTwd: number; exchangeRates: ExchangeRatesTable }> {
+  let liveRates: ExchangeRatesTable = currentRates || DEFAULT_EXCHANGE_RATES;
   if (holdings.length === 0) {
-    return { updatedHoldings: [], exchangeRateUsdTwd: currentUsdTwdRate };
+    return { updatedHoldings: [], exchangeRateUsdTwd: currentUsdTwdRate, exchangeRates: liveRates };
   }
 
   const symbols = Array.from(new Set(holdings.map((h) => h.symbol.trim().toUpperCase())));
@@ -312,6 +385,9 @@ export async function syncAllHoldingsQuotes(
       if (typeof data.exchangeRateUsdTwd === 'number' && data.exchangeRateUsdTwd > 20) {
         liveFx = data.exchangeRateUsdTwd;
       }
+      if (data.exchangeRates) {
+        liveRates = data.exchangeRates;
+      }
       if (data.quotes) {
         apiQuotes = data.quotes;
       }
@@ -322,8 +398,18 @@ export async function syncAllHoldingsQuotes(
       const rRes = await fetch('https://open.er-api.com/v6/latest/USD');
       if (rRes.ok) {
         const rData = (await rRes.json()) as { rates?: Record<string, number> };
-        if (rData?.rates?.TWD) {
-          liveFx = Math.round(rData.rates.TWD * 100) / 100;
+        const r = rData?.rates;
+        if (r && typeof r.TWD === 'number') {
+          liveFx = Math.round(r.TWD * 100) / 100;
+          liveRates = {
+            USD: liveFx,
+            JPY: r.JPY ? Math.round((liveFx / r.JPY) * 10000) / 10000 : liveRates.JPY,
+            CNY: r.CNY ? Math.round((liveFx / r.CNY) * 1000) / 1000 : liveRates.CNY,
+            KRW: r.KRW ? Math.round((liveFx / r.KRW) * 10000) / 10000 : liveRates.KRW,
+            VND: r.VND ? Math.round((liveFx / r.VND) * 100000) / 100000 : liveRates.VND,
+            TWD: 1,
+            updatedAt: new Date().toISOString(),
+          };
         }
       }
     } catch {
@@ -357,5 +443,6 @@ export async function syncAllHoldingsQuotes(
   return {
     updatedHoldings,
     exchangeRateUsdTwd: liveFx,
+    exchangeRates: liveRates,
   };
 }

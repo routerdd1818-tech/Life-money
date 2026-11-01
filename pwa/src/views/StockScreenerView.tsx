@@ -2,9 +2,13 @@ import React, { useMemo, useState } from 'react';
 import {
   Activity,
   BookOpen,
+  Briefcase,
   Check,
+  CheckCircle2,
+  Eye,
   Filter,
   Flame,
+  Heart,
   Layers,
   Plus,
   RotateCcw,
@@ -13,6 +17,7 @@ import {
   Star,
   Trash2,
   TrendingUp,
+  Wallet,
 } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
 import {
@@ -21,9 +26,10 @@ import {
   QUANT_STRATEGIES,
   STOCK_SECTORS,
 } from '../services/stockScreenerEngine';
-import { ScreenerFilterCriteria, ScreenerStockItem, StockSectorId } from '../types';
+import { ScreenerFilterCriteria, ScreenerStockItem, StockSectorId, WatchlistType } from '../types';
 
 type ScreenerSubTab = 'screener' | 'sectors' | 'watchlist' | 'guide';
+type WatchlistCategory = 'watching' | 'holdings' | 'favorite';
 
 export const StockScreenerView: React.FC = () => {
   const {
@@ -31,11 +37,13 @@ export const StockScreenerView: React.FC = () => {
     watchlist,
     upsertWatchlistItem,
     deleteWatchlistItem,
+    securityHoldings,
     upsertSecurityHolding,
     exchangeRateUsdTwd,
   } = useVault();
 
   const [subTab, setSubTab] = useState<ScreenerSubTab>('screener');
+  const [watchlistCategory, setWatchlistCategory] = useState<WatchlistCategory>('watching');
   const [activeStrategyId, setActiveStrategyId] = useState<string>('bottom_up_all_star');
   const [showCustomSliders, setShowCustomSliders] = useState<boolean>(false);
   const [criteria, setCriteria] = useState<ScreenerFilterCriteria>(
@@ -50,6 +58,7 @@ export const StockScreenerView: React.FC = () => {
   const [wlSymbol, setWlSymbol] = useState('');
   const [wlName, setWlName] = useState('');
   const [wlSector, setWlSector] = useState('半導體與 CoWoS 封裝');
+  const [wlListType, setWlListType] = useState<WatchlistType>('watching');
   const [wlPrice, setWlPrice] = useState('');
   const [wlTargetBuy, setWlTargetBuy] = useState('');
   const [wlStopLoss, setWlStopLoss] = useState('');
@@ -77,10 +86,45 @@ export const StockScreenerView: React.FC = () => {
     setCriteria({ ...found.criteria });
   };
 
+  const getWatchlistItem = (symbol: string) =>
+    watchlist.find((w) => w.symbol.toUpperCase() === symbol.toUpperCase());
+
   const isInWatchlist = (symbol: string) =>
     watchlist.some((w) => w.symbol.toUpperCase() === symbol.toUpperCase());
 
-  const handleAddStockToWatchlist = (stock: ScreenerStockItem, strategyName?: string) => {
+  const isHeldInPortfolio = (symbol: string) =>
+    securityHoldings.some((h) => h.symbol.toUpperCase() === symbol.toUpperCase());
+
+  const watchingStocks = useMemo(
+    () => watchlist.filter((w) => (w.listType || 'watching') === 'watching'),
+    [watchlist]
+  );
+
+  const favoriteStocks = useMemo(
+    () => watchlist.filter((w) => w.listType === 'favorite'),
+    [watchlist]
+  );
+
+  const portfolioStats = useMemo(() => {
+    const totalMarketValue = securityHoldings.reduce((sum, h) => sum + h.marketValueTwd, 0);
+    const totalCost = securityHoldings.reduce(
+      (sum, h) =>
+        sum +
+        h.costBasisPerUnit *
+          h.units *
+          (h.currency === 'USD' ? exchangeRateUsdTwd : 1),
+      0
+    );
+    const totalPnl = totalMarketValue - totalCost;
+    const totalReturnPct = totalCost > 0 ? Math.round((totalPnl / totalCost) * 1000) / 10 : 0;
+    return { totalMarketValue, totalCost, totalPnl, totalReturnPct };
+  }, [securityHoldings, exchangeRateUsdTwd]);
+
+  const handleAddStockToWatchlist = (
+    stock: ScreenerStockItem,
+    strategyName?: string,
+    listType: WatchlistType = 'watching'
+  ) => {
     const targetBuy = Math.round(stock.price * 0.96 * 10) / 10;
     const stopLoss = Math.round(stock.price * 0.9 * 10) / 10;
     upsertWatchlistItem({
@@ -88,6 +132,7 @@ export const StockScreenerView: React.FC = () => {
       symbol: stock.symbol,
       name: stock.name,
       sectorName: stock.sectorName,
+      listType,
       addedPrice: stock.price,
       currentPrice: stock.price,
       targetBuyPrice: targetBuy,
@@ -618,28 +663,47 @@ export const StockScreenerView: React.FC = () => {
                         {stock.catalystNote}
                       </p>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleAddStockToWatchlist(stock)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors ${
-                            watched
-                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                              : 'bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] text-[#191F28] dark:text-white'
-                          }`}
-                        >
-                          {watched ? (
-                            <>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {(() => {
+                          const existing = getWatchlistItem(stock.symbol);
+                          if (!existing) {
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddStockToWatchlist(stock, undefined, 'watching')}
+                                  className="px-2.5 py-1.5 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] text-[#191F28] dark:text-white text-xs font-semibold flex items-center gap-1 transition-colors"
+                                  title="加入觀察清單"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-[#2563EB]" />
+                                  <span>+ 觀察</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddStockToWatchlist(stock, undefined, 'favorite')}
+                                  className="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-[#F04452] text-xs font-semibold flex items-center gap-1 transition-colors"
+                                  title="加入喜好清單"
+                                >
+                                  <Heart className="w-3.5 h-3.5 fill-current" />
+                                  <span>+ 喜好</span>
+                                </button>
+                              </>
+                            );
+                          }
+
+                          return (
+                            <span
+                              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 ${
+                                existing.listType === 'favorite'
+                                  ? 'bg-rose-50 dark:bg-rose-950/40 text-[#F04452] border border-rose-200 dark:border-rose-900/50'
+                                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                              }`}
+                            >
                               <Check className="w-3.5 h-3.5" />
-                              <span>已關注</span>
-                            </>
-                          ) : (
-                            <>
-                              <Star className="w-3.5 h-3.5 text-amber-500" />
-                              <span>加入關注</span>
-                            </>
-                          )}
-                        </button>
+                              <span>{existing.listType === 'favorite' ? '❤️ 喜好中' : '👁️ 觀察中'}</span>
+                            </span>
+                          );
+                        })()}
 
                         <button
                           type="button"
@@ -872,13 +936,38 @@ export const StockScreenerView: React.FC = () => {
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleAddStockToWatchlist(st, `${activeSec.name}強勢股`)}
-                          className="px-2.5 py-1.5 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#2563EB] hover:text-white text-xs font-semibold transition-colors"
-                        >
-                          + 關注
-                        </button>
+                        {(() => {
+                          const existing = getWatchlistItem(st.symbol);
+                          if (!existing) {
+                            return (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddStockToWatchlist(st, `${activeSec.name}強勢股`, 'watching')}
+                                  className="px-2 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] hover:bg-[#E2E8F0] text-xs font-medium transition-colors"
+                                  title="加入觀察清單"
+                                >
+                                  + 觀察
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddStockToWatchlist(st, `${activeSec.name}強勢股`, 'favorite')}
+                                  className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-[#F04452] text-xs font-semibold transition-colors flex items-center gap-0.5"
+                                  title="加入喜好清單"
+                                >
+                                  <Heart className="w-3 h-3 fill-current" />
+                                  <span>喜好</span>
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <span className="text-[11px] font-semibold text-[#8B95A1] px-2 py-1 bg-[#F0F2F6] dark:bg-[#1F2631] rounded-lg">
+                              {existing.listType === 'favorite' ? '❤️ 喜好' : '👁️ 觀察'}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}
@@ -890,29 +979,76 @@ export const StockScreenerView: React.FC = () => {
       )}
 
       {/* =====================================================================
-          Sub-Tab 3: ⭐ 智能可關注股票清單 (Watchlist & Target Entry Tracker)
+          Sub-Tab 3: ⭐ 智能股票清單 (觀察清單 · 持股清單 · 喜好清單)
          ===================================================================== */}
       {subTab === 'watchlist' && (
         <div className="space-y-4">
-          <div className="toss-card p-4 flex items-center justify-between">
-            <div>
-              <div className="text-xs text-[#8B95A1]">
-                依據四大面向與量化策略篩選出之觀察名單，設定理想買點與紀律停損價
-              </div>
-              <div className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8] tabular-nums">
-                目前追蹤 {watchlist.length} 檔潛力標的
-              </div>
+          {/* 三分類導航列：觀察清單 / 持股清單 / 喜好清單 */}
+          <div className="toss-card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631]">
+              <button
+                type="button"
+                onClick={() => setWatchlistCategory('watching')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  watchlistCategory === 'watching'
+                    ? 'bg-white dark:bg-[#161B22] text-[#2563EB] shadow-2xs font-bold'
+                    : 'text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28]'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>觀察清單</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/50 text-[10px] tabular-nums">
+                  {watchingStocks.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWatchlistCategory('holdings')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  watchlistCategory === 'holdings'
+                    ? 'bg-white dark:bg-[#161B22] text-[#2563EB] shadow-2xs font-bold'
+                    : 'text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28]'
+                }`}
+              >
+                <Briefcase className="w-3.5 h-3.5" />
+                <span>持股清單</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/50 text-[10px] tabular-nums">
+                  {securityHoldings.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWatchlistCategory('favorite')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  watchlistCategory === 'favorite'
+                    ? 'bg-white dark:bg-[#161B22] text-[#F04452] shadow-2xs font-bold'
+                    : 'text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28]'
+                }`}
+              >
+                <Heart className="w-3.5 h-3.5 fill-current text-[#F04452]" />
+                <span>喜好清單</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-rose-100 dark:bg-rose-900/50 text-[10px] text-[#F04452] tabular-nums">
+                  {favoriteStocks.length}
+                </span>
+              </button>
             </div>
+
             <button
               type="button"
-              onClick={() => setShowAddWatch(!showAddWatch)}
-              className="px-3.5 py-2 rounded-xl bg-[#2563EB] text-white text-xs font-semibold flex items-center gap-1 shrink-0"
+              onClick={() => {
+                setWlListType(watchlistCategory === 'favorite' ? 'favorite' : 'watching');
+                setShowAddWatch(!showAddWatch);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-[#2563EB] text-white text-xs font-semibold flex items-center justify-center gap-1 shrink-0"
             >
               <Plus className="w-4 h-4" />
-              <span>自訂新增關注</span>
+              <span>新增標的</span>
             </button>
           </div>
 
+          {/* 新增股票表單 */}
           {showAddWatch && (
             <form
               onSubmit={(e) => {
@@ -925,6 +1061,7 @@ export const StockScreenerView: React.FC = () => {
                   symbol: wlSymbol.trim().toUpperCase(),
                   name: wlName.trim(),
                   sectorName: wlSector,
+                  listType: wlListType,
                   addedPrice: p,
                   currentPrice: p,
                   targetBuyPrice: wlTargetBuy ? Number(wlTargetBuy) : undefined,
@@ -940,7 +1077,32 @@ export const StockScreenerView: React.FC = () => {
               }}
               className="toss-card p-4 space-y-3"
             >
-              <div className="text-xs font-bold">新增關注股票與理想買點</div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                  手動新增標的至 {wlListType === 'favorite' ? '❤️ 喜好清單' : '👁️ 觀察清單'}
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="wlListType"
+                      checked={wlListType === 'watching'}
+                      onChange={() => setWlListType('watching')}
+                    />
+                    <span>觀察清單</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="wlListType"
+                      checked={wlListType === 'favorite'}
+                      onChange={() => setWlListType('favorite')}
+                    />
+                    <span>喜好清單</span>
+                  </label>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <input
                   type="text"
@@ -1013,110 +1175,373 @@ export const StockScreenerView: React.FC = () => {
                 type="submit"
                 className="w-full py-2.5 rounded-xl bg-[#2563EB] text-white text-xs font-semibold"
               >
-                加入關注清單
+                儲存至{wlListType === 'favorite' ? '喜好清單' : '觀察清單'}
               </button>
             </form>
           )}
 
-          <div className="space-y-3">
-            {watchlist.map((item) => {
-              const sinceAddedPct =
-                item.addedPrice > 0
-                  ? Math.round(((item.currentPrice - item.addedPrice) / item.addedPrice) * 1000) /
-                    10
-                  : 0;
-              const isInBuyZone =
-                typeof item.targetBuyPrice === 'number' &&
-                item.currentPrice <= item.targetBuyPrice;
+          {/* 分類 1: 持股清單 (Portfolio Holdings) */}
+          {watchlistCategory === 'holdings' && (
+            <div className="space-y-3">
+              {/* 持股總結卡片 */}
+              <div className="toss-card p-4 bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-blue-950/20 dark:to-[#161B22] border border-blue-100 dark:border-blue-900/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-[#2563EB]" />
+                    <span className="text-xs font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                      實體投資組合部位即時概況
+                    </span>
+                  </div>
+                  <span className="text-xs text-[#8B95A1] tabular-nums">
+                    共持有 {securityHoldings.length} 檔證券標的
+                  </span>
+                </div>
 
-              return (
-                <div key={item.id} className="toss-card p-4 space-y-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                          {item.name}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-mono text-[#4E5968] dark:text-[#9BA4B0]">
-                          {item.symbol}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-[10px] font-semibold text-[#2563EB]">
-                          {item.sectorName}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                          {item.strategyTag}
-                        </span>
-                      </div>
-                      {item.notes && (
-                        <div className="text-xs text-[#4E5968] dark:text-[#9BA4B0] mt-1">
-                          {item.notes}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right tabular-nums">
-                        <div className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                          ${item.currentPrice.toLocaleString()}
-                        </div>
-                        <div
-                          className={`text-[11px] font-semibold ${
-                            sinceAddedPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                          }`}
-                        >
-                          納入後 {sinceAddedPct >= 0 ? '▲ +' : '▼ '}
-                          {sinceAddedPct}%
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => deleteWatchlistItem(item.id)}
-                        className="p-1 text-[#8B95A1] hover:text-[#F04452]"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 pt-3 border-t border-blue-100 dark:border-blue-900/30">
+                  <div>
+                    <div className="text-[11px] text-[#8B95A1]">持倉總市值 (TWD)</div>
+                    <div className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8] tabular-nums">
+                      ${Math.round(portfolioStats.totalMarketValue).toLocaleString()}
                     </div>
                   </div>
-
-                  <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
-                    <div className="flex items-center gap-4">
-                      {item.targetBuyPrice && (
-                        <span
-                          className={
-                            isInBuyZone
-                              ? 'font-bold text-[#059669]'
-                              : 'text-[#4E5968] dark:text-[#9BA4B0]'
-                          }
-                        >
-                          🎯 理想買點：${item.targetBuyPrice.toLocaleString()}{' '}
-                          {isInBuyZone ? '(已達擊球區！)' : ''}
-                        </span>
-                      )}
-                      {item.stopLossPrice && (
-                        <span className="text-[#8B95A1]">
-                          🛡️ 紀律停損：${item.stopLossPrice.toLocaleString()}
-                        </span>
-                      )}
+                  <div>
+                    <div className="text-[11px] text-[#8B95A1]">總投資成本</div>
+                    <div className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8] tabular-nums">
+                      ${Math.round(portfolioStats.totalCost).toLocaleString()}
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleBuyIntoPortfolio({
-                          symbol: item.symbol,
-                          name: item.name,
-                          price: item.currentPrice,
-                        })
-                      }
-                      className="px-3 py-1 rounded-lg bg-[#2563EB] text-white text-xs font-semibold"
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-[#8B95A1]">未實現損益</div>
+                    <div
+                      className={`text-base font-bold tabular-nums ${
+                        portfolioStats.totalPnl >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                      }`}
                     >
-                      買進轉入持倉
-                    </button>
+                      {portfolioStats.totalPnl >= 0 ? '+$' : '-$'}
+                      {Math.abs(Math.round(portfolioStats.totalPnl)).toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-[#8B95A1]">整體未實現報酬率</div>
+                    <div
+                      className={`text-base font-bold tabular-nums ${
+                        portfolioStats.totalReturnPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                      }`}
+                    >
+                      {portfolioStats.totalReturnPct >= 0 ? '▲ +' : '▼ '}
+                      {portfolioStats.totalReturnPct}%
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+
+              {securityHoldings.length === 0 ? (
+                <div className="toss-card p-8 text-center text-[#8B95A1] text-xs">
+                  目前資產庫中尚無持股部位，可在選股漏斗或資產中心直接買進標的。
+                </div>
+              ) : (
+                securityHoldings.map((holding) => {
+                  const wlItem = getWatchlistItem(holding.symbol);
+                  return (
+                    <div key={holding.id} className="toss-card p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                              {holding.name}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-mono text-[#4E5968] dark:text-[#9BA4B0]">
+                              {holding.symbol}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-[10px] font-semibold text-[#2563EB] uppercase">
+                              {holding.category} · {holding.currency}
+                            </span>
+                            {wlItem?.listType === 'favorite' && (
+                              <span className="px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/40 text-[10px] font-semibold text-[#F04452] flex items-center gap-0.5">
+                                <Heart className="w-2.5 h-2.5 fill-current" /> 喜好中
+                              </span>
+                            )}
+                            {wlItem?.listType === 'watching' && (
+                              <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-[10px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-0.5">
+                                <Eye className="w-2.5 h-2.5" /> 觀察中
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-[#8B95A1] tabular-nums mt-1">
+                            持有 {holding.units.toLocaleString()} 股 · 買入均價{' '}
+                            {holding.currency === 'USD' ? 'USD ' : 'NT$ '}
+                            {holding.costBasisPerUnit.toLocaleString()}
+                          </div>
+                        </div>
+
+                        <div className="text-right tabular-nums">
+                          <div className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                            ${Math.round(holding.marketValueTwd).toLocaleString()}{' '}
+                            <span className="text-xs font-normal text-[#8B95A1]">TWD</span>
+                          </div>
+                          <div
+                            className={`text-[11px] font-semibold ${
+                              holding.unrealizedReturnPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                            }`}
+                          >
+                            {holding.unrealizedReturnPct >= 0 ? '▲ +' : '▼ '}
+                            {holding.unrealizedReturnPct}% (
+                            {holding.unrealizedPnlTwd >= 0 ? '+$' : '-$'}
+                            {Math.abs(Math.round(holding.unrealizedPnlTwd)).toLocaleString()})
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="text-[#8B95A1] tabular-nums">
+                          現價：{holding.currency === 'USD' ? '$' : 'NT$ '}
+                          {holding.currentPrice.toLocaleString()} · 殖利率約{' '}
+                          {holding.estimatedAnnualYieldPct || 0}%
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {!wlItem ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  upsertWatchlistItem({
+                                    id: `wl-${holding.symbol}-${Date.now()}`,
+                                    symbol: holding.symbol,
+                                    name: holding.name,
+                                    sectorName: '既有持倉',
+                                    listType: 'watching',
+                                    addedPrice: holding.currentPrice,
+                                    currentPrice: holding.currentPrice,
+                                    strategyTag: '實體持股聯動',
+                                    notes: `目前持股 ${holding.units} 股`,
+                                    addedAt: new Date().toISOString(),
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] text-[11px] font-medium hover:text-[#2563EB]"
+                              >
+                                + 觀察
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  upsertWatchlistItem({
+                                    id: `wl-${holding.symbol}-${Date.now()}`,
+                                    symbol: holding.symbol,
+                                    name: holding.name,
+                                    sectorName: '既有持倉',
+                                    listType: 'favorite',
+                                    addedPrice: holding.currentPrice,
+                                    currentPrice: holding.currentPrice,
+                                    strategyTag: '實體持股聯動',
+                                    notes: `核心持股 ${holding.units} 股`,
+                                    addedAt: new Date().toISOString(),
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-[11px] font-semibold text-[#F04452] flex items-center gap-1"
+                              >
+                                <Heart className="w-3 h-3 fill-current" />
+                                <span>加喜好</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                upsertWatchlistItem({
+                                  ...wlItem,
+                                  listType: wlItem.listType === 'favorite' ? 'watching' : 'favorite',
+                                })
+                              }
+                              className="px-2.5 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] text-[11px] font-medium text-[#8B95A1]"
+                            >
+                              轉為{wlItem.listType === 'favorite' ? '觀察' : '喜好'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleBuyIntoPortfolio({
+                                symbol: holding.symbol,
+                                name: holding.name,
+                                price: holding.currentPrice,
+                                market: holding.currency === 'USD' ? 'US' : 'TW',
+                                dividendYieldPct: holding.estimatedAnnualYieldPct,
+                              })
+                            }
+                            className="px-3 py-1 rounded-lg bg-[#2563EB] text-white text-xs font-semibold"
+                          >
+                            加碼買進
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* 分類 2 & 3: 觀察清單 (watching) 與 喜好清單 (favorite) */}
+          {watchlistCategory !== 'holdings' && (
+            <div className="space-y-3">
+              {(() => {
+                const targetList =
+                  watchlistCategory === 'favorite' ? favoriteStocks : watchingStocks;
+
+                if (targetList.length === 0) {
+                  return (
+                    <div className="toss-card p-8 text-center text-[#8B95A1] text-xs space-y-2">
+                      <p>
+                        目前{watchlistCategory === 'favorite' ? '「喜好清單」' : '「觀察清單」'}
+                        中尚無標的。
+                      </p>
+                      <p className="text-[11px]">
+                        可透過上方「新增標的」或在「智能選股漏斗」中點擊收藏快速納入。
+                      </p>
+                    </div>
+                  );
+                }
+
+                return targetList.map((item) => {
+                  const sinceAddedPct =
+                    item.addedPrice > 0
+                      ? Math.round(
+                          ((item.currentPrice - item.addedPrice) / item.addedPrice) * 1000
+                        ) / 10
+                      : 0;
+                  const isInBuyZone =
+                    typeof item.targetBuyPrice === 'number' &&
+                    item.currentPrice <= item.targetBuyPrice;
+                  const isStopLoss =
+                    typeof item.stopLossPrice === 'number' &&
+                    item.currentPrice <= item.stopLossPrice;
+                  const isHeld = isHeldInPortfolio(item.symbol);
+
+                  return (
+                    <div key={item.id} className="toss-card p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                              {item.name}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-mono text-[#4E5968] dark:text-[#9BA4B0]">
+                              {item.symbol}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-[10px] font-semibold text-[#2563EB]">
+                              {item.sectorName}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                              {item.strategyTag}
+                            </span>
+                            {item.listType === 'favorite' ? (
+                              <span className="px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/40 text-[10px] font-bold text-[#F04452] flex items-center gap-0.5">
+                                <Heart className="w-2.5 h-2.5 fill-current" /> 喜好
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#1F2631] text-[10px] font-medium text-[#4E5968] dark:text-[#9BA4B0] flex items-center gap-0.5">
+                                <Eye className="w-2.5 h-2.5" /> 觀察
+                              </span>
+                            )}
+                            {isHeld && (
+                              <span className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-[10px] font-bold text-[#059669]">
+                                💼 持倉中
+                              </span>
+                            )}
+                          </div>
+                          {item.notes && (
+                            <div className="text-xs text-[#4E5968] dark:text-[#9BA4B0] mt-1">
+                              {item.notes}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-right tabular-nums">
+                            <div className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                              ${item.currentPrice.toLocaleString()}
+                            </div>
+                            <div
+                              className={`text-[11px] font-semibold ${
+                                sinceAddedPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                              }`}
+                            >
+                              納入後 {sinceAddedPct >= 0 ? '▲ +' : '▼ '}
+                              {sinceAddedPct}%
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => deleteWatchlistItem(item.id)}
+                            className="p-1 text-[#8B95A1] hover:text-[#F04452]"
+                            title="從清單移除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
+                        <div className="flex flex-wrap items-center gap-3">
+                          {item.targetBuyPrice && (
+                            <span
+                              className={
+                                isInBuyZone
+                                  ? 'font-bold text-[#059669]'
+                                  : 'text-[#4E5968] dark:text-[#9BA4B0]'
+                              }
+                            >
+                              🎯 理想買點：${item.targetBuyPrice.toLocaleString()}{' '}
+                              {isInBuyZone ? '(已達擊球區！)' : ''}
+                            </span>
+                          )}
+                          {item.stopLossPrice && (
+                            <span
+                              className={
+                                isStopLoss ? 'font-bold text-[#F04452]' : 'text-[#8B95A1]'
+                              }
+                            >
+                              🛡️ 紀律停損：${item.stopLossPrice.toLocaleString()}{' '}
+                              {isStopLoss ? '(觸發停損警戒！)' : ''}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              upsertWatchlistItem({
+                                ...item,
+                                listType: item.listType === 'favorite' ? 'watching' : 'favorite',
+                              })
+                            }
+                            className="px-2.5 py-1 rounded-lg bg-[#F0F2F6] dark:bg-[#1F2631] text-[11px] font-semibold text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#2563EB]"
+                          >
+                            {item.listType === 'favorite' ? '轉為觀察' : '轉為喜好'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleBuyIntoPortfolio({
+                                symbol: item.symbol,
+                                name: item.name,
+                                price: item.currentPrice,
+                              })
+                            }
+                            className="px-3 py-1 rounded-lg bg-[#2563EB] text-white text-xs font-semibold"
+                          >
+                            買進轉入持倉
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          )}
         </div>
       )}
 

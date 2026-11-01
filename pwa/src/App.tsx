@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cloud, Plus, Settings } from 'lucide-react';
+import { Cloud, Plus, Settings, User } from 'lucide-react';
 import { VaultProvider, useVault } from './context/VaultContext';
 import { MainTabId } from './types';
 import { BottomNav } from './components/BottomNav';
@@ -26,7 +26,7 @@ const TAB_TITLES: Record<MainTabId, { title: string; subtitle: string }> = {
 };
 
 const MainAppShell: React.FC = () => {
-  const { settings, shortfallAlerts } = useVault();
+  const { settings, shortfallAlerts, currentUser } = useVault();
   const [activeTab, setActiveTab] = useState<MainTabId>('overview');
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -58,11 +58,24 @@ const MainAppShell: React.FC = () => {
               <span>快速記帳</span>
             </button>
 
+            {/* 使用者帳號與金庫切換快捷標籤 */}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] dark:hover:text-white flex items-center gap-1.5 text-xs transition-colors"
+              title="使用者帳號與金庫設定"
+            >
+              <User className="w-3.5 h-3.5 text-[#2563EB]" />
+              <span className="max-w-[70px] sm:max-w-[110px] truncate font-medium">
+                {currentUser?.displayName || currentUser?.username || '金庫帳號'}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
               className="p-2 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] dark:hover:text-white flex items-center gap-1 text-xs"
-              title="雲端同步與設定"
+              title="雲端同步與系統設定"
             >
               {settings.lastSyncedAt ? (
                 <Cloud className="w-4 h-4 text-[#059669]" />

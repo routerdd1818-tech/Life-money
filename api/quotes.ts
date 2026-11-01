@@ -28,7 +28,27 @@ interface VercelResponseLike {
   json: (body: unknown) => void;
 }
 
-async function fetchUsdToTwdRate(): Promise<number> {
+interface ExchangeRatesTable {
+  USD: number;
+  JPY: number;
+  CNY: number;
+  KRW: number;
+  VND: number;
+  TWD: number;
+  updatedAt: string;
+}
+
+async function fetchAllExchangeRates(): Promise<ExchangeRatesTable> {
+  const defaultRates: ExchangeRatesTable = {
+    USD: 32.25,
+    JPY: 0.215,
+    CNY: 4.45,
+    KRW: 0.0235,
+    VND: 0.00128,
+    TWD: 1,
+    updatedAt: new Date().toISOString(),
+  };
+
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3500);
@@ -38,33 +58,25 @@ async function fetchUsdToTwdRate(): Promise<number> {
     clearTimeout(timer);
     if (res.ok) {
       const data = (await res.json()) as { rates?: Record<string, number> };
-      const twd = data?.rates?.TWD;
-      if (typeof twd === 'number' && twd > 20 && twd < 45) {
-        return Math.round(twd * 100) / 100;
-      }
-    }
-  } catch {
-    // Fallback to Yahoo USDTWD=X
-  }
-
-  try {
-    const res = await fetch(
-      'https://query1.finance.yahoo.com/v8/finance/chart/USDTWD=X?interval=1d&range=1d'
-    );
-    if (res.ok) {
-      const data = (await res.json()) as {
-        chart?: { result?: Array<{ meta?: { regularMarketPrice?: number } }> };
-      };
-      const rate = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (typeof rate === 'number' && rate > 20 && rate < 45) {
-        return Math.round(rate * 100) / 100;
+      const rates = data?.rates;
+      if (rates && typeof rates.TWD === 'number' && rates.TWD > 0) {
+        const twd = rates.TWD;
+        return {
+          USD: Math.round(twd * 100) / 100,
+          JPY: rates.JPY ? Math.round((twd / rates.JPY) * 10000) / 10000 : defaultRates.JPY,
+          CNY: rates.CNY ? Math.round((twd / rates.CNY) * 1000) / 1000 : defaultRates.CNY,
+          KRW: rates.KRW ? Math.round((twd / rates.KRW) * 10000) / 10000 : defaultRates.KRW,
+          VND: rates.VND ? Math.round((twd / rates.VND) * 100000) / 100000 : defaultRates.VND,
+          TWD: 1,
+          updatedAt: new Date().toISOString(),
+        };
       }
     }
   } catch {
     // Fallback default
   }
 
-  return 32.18;
+  return defaultRates;
 }
 
 async function fetchYahooSingle(targetSymbol: string): Promise<QuoteItemResult | null> {
@@ -166,8 +178,8 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const [usdTwdRate, ...quoteResults] = await Promise.all([
-    fetchUsdToTwdRate(),
+  const [exchangeRates, ...quoteResults] = await Promise.all([
+    fetchAllExchangeRates(),
     ...requestedSymbols.map(async (rawSym): Promise<[string, QuoteItemResult | null]> => {
       const candidates = getCandidateYahooSymbols(rawSym);
       for (const candidate of candidates) {
@@ -188,7 +200,8 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
   }
 
   res.status(200).json({
-    exchangeRateUsdTwd: usdTwdRate,
+    exchangeRateUsdTwd: exchangeRates.USD,
+    exchangeRates,
     quotes,
     fetchedAt: new Date().toISOString(),
   });

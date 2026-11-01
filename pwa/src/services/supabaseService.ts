@@ -4,11 +4,14 @@ import {
   CalendarEventItem,
   CreditCard,
   DebtRecord,
+  ExchangeRatesTable,
   Installment,
   InsurancePolicy,
+  LoanContract,
   MedicalRecord,
   NetWorthSnapshot,
   RecurringItem,
+  SavingsGoal,
   SecurityHolding,
   Transaction,
   VaultSettings,
@@ -18,6 +21,8 @@ import {
 
 export interface CloudVaultPayload {
   vault_key: string;
+  user_id?: string;
+  email?: string;
   owner_name: string;
   transactions: Transaction[];
   credit_cards: CreditCard[];
@@ -32,23 +37,42 @@ export interface CloudVaultPayload {
   medical_records: MedicalRecord[];
   manual_calendar_events: CalendarEventItem[];
   watchlist?: WatchlistStockItem[];
+  loans?: LoanContract[];
+  savings_goals?: SavingsGoal[];
+  exchange_rates?: ExchangeRatesTable;
   exchange_rate_usd_twd: number;
   updated_at: string;
 }
 
+export function getSupabaseClient(settings: VaultSettings) {
+  if (!settings.supabaseUrl || !settings.supabaseAnonKey) return null;
+  return createClient(settings.supabaseUrl.trim(), settings.supabaseAnonKey.trim(), {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
+}
+
 export async function pushVaultToSupabase(
   settings: VaultSettings,
-  payload: Omit<CloudVaultPayload, 'vault_key' | 'owner_name' | 'updated_at'>
+  payload: Omit<CloudVaultPayload, 'vault_key' | 'owner_name' | 'updated_at'>,
+  userId?: string,
+  userEmail?: string
 ): Promise<{ ok: boolean; message: string; syncedAt?: string }> {
   if (!settings.supabaseUrl || !settings.supabaseAnonKey || !settings.vaultKey) {
     return { ok: false, message: '請先於設定中填寫 Supabase URL、Anon Key 與金庫通行碼' };
   }
 
   try {
-    const supabase = createClient(settings.supabaseUrl.trim(), settings.supabaseAnonKey.trim());
+    const supabase = getSupabaseClient(settings);
+    if (!supabase) return { ok: false, message: 'Supabase 客戶端初始化失敗' };
+
     const nowIso = new Date().toISOString();
     const row: CloudVaultPayload = {
       vault_key: settings.vaultKey.trim(),
+      user_id: userId,
+      email: userEmail,
       owner_name: settings.ownerName || '我的財務與生活管家',
       ...payload,
       updated_at: nowIso,
@@ -76,7 +100,9 @@ export async function pullVaultFromSupabase(
   }
 
   try {
-    const supabase = createClient(settings.supabaseUrl.trim(), settings.supabaseAnonKey.trim());
+    const supabase = getSupabaseClient(settings);
+    if (!supabase) return { ok: false, message: 'Supabase 客戶端初始化失敗' };
+
     const { data, error } = await supabase
       .from('user_vault_data')
       .select('*')

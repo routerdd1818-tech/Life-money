@@ -16,6 +16,7 @@ export const CalendarView: React.FC = () => {
     vehicles,
     insurancePolicies,
     medicalRecords,
+    loans,
   } = useVault();
 
   const today = new Date();
@@ -46,6 +47,7 @@ export const CalendarView: React.FC = () => {
         vehicles,
         policies: insurancePolicies,
         medicalRecords,
+        loans,
       }),
     [
       viewYear,
@@ -58,6 +60,7 @@ export const CalendarView: React.FC = () => {
       vehicles,
       insurancePolicies,
       medicalRecords,
+      loans,
     ]
   );
 

@@ -121,12 +121,24 @@ export interface RecurringItem {
 // ==========================================
 
 export type BankAccountType = 'cash' | 'bank' | 'digital_wallet' | 'brokerage_cash';
+export type SupportedCurrency = 'TWD' | 'USD' | 'JPY' | 'CNY' | 'KRW' | 'VND';
+
+export interface ExchangeRatesTable {
+  USD: number; // 1 USD in TWD (e.g. 32.2)
+  JPY: number; // 1 JPY in TWD (e.g. 0.215)
+  CNY: number; // 1 CNY in TWD (e.g. 4.45)
+  KRW: number; // 1 KRW in TWD (e.g. 0.0235)
+  VND: number; // 1 VND in TWD (e.g. 0.00128)
+  TWD: number; // 1
+  updatedAt: string;
+}
 
 export interface AssetAccount {
   id: string;
   name: string;                    // 例: '錢包現金', '台新 Richart', '國泰交割戶', 'Line Pay'
   type: BankAccountType;
-  balance: number;                 // 當前餘額 (TWD)
+  balance: number;                 // 當前原幣別餘額
+  currency?: SupportedCurrency;    // 幣別 (預設 'TWD', 支援 USD, JPY, CNY, KRW, VND)
   bankCode?: string;               // 例: '812', '013'
   accountLastFour?: string;        // 例: '5566'
   interestRate?: number;           // 高利活存利率 % (選填)
@@ -208,10 +220,23 @@ export interface VehicleMaintenanceLog {
   notes?: string;
 }
 
+export type VehicleType =
+  | 'sedan'        // 轎車 / 掀背車
+  | 'suv'          // 休旅車 SUV
+  | 'mpv'          // 廂型車 / 商旅 MPV
+  | 'scooter'      // 白牌普通重型機車
+  | 'heavy_motor'  // 黃/紅牌大型重型機車
+  | 'electric'     // 純電動車 (EV)
+  | 'truck';       // 貨車 / 其他
+
 export interface VehicleProfile {
   id: string;
-  name: string;                    // 例: 'Toyota RAV4 Hybrid', 'Gogoro VIVA MIX'
-  licensePlate: string;            // 例: 'ABC-8899'
+  name: string;                    // 車輛自訂名稱 (例: '小紅 RAV4', '通勤勁戰')
+  vehicleType: VehicleType;        // 車型種類
+  brand?: string;                  // 廠牌 (例: 'Toyota', 'Honda', 'SYM', 'Gogoro', 'Tesla')
+  modelName?: string;              // 車款型號 (例: 'RAV4 Hybrid 2.5', 'Jet SL 158')
+  licensePlate: string;            // 車牌號碼 (例: 'ABC-8899', 'MMB-1234')
+  displacementCc?: number;         // 排氣量 cc (推算稅金)
   currentMileage: number;          // 目前總里程 (km)
   nextInspectionDate?: string;     // 下次驗車到期日 YYYY-MM-DD
   insuranceExpiryDate?: string;    // 強制險/任意險到期日 YYYY-MM-DD
@@ -412,11 +437,14 @@ export interface ScreenerFilterCriteria {
   requireTrustBuy: boolean;        // Step 4: 投信近 5 日認養買超 > 0
 }
 
+export type WatchlistType = 'watching' | 'favorite';
+
 export interface WatchlistStockItem {
   id: string;
   symbol: string;
   name: string;
   sectorName: string;
+  listType: WatchlistType;         // 'watching' (觀察清單) | 'favorite' (喜好/自選核心清單)
   addedPrice: number;
   currentPrice: number;
   targetBuyPrice?: number;         // 理想觀察買點
@@ -424,5 +452,146 @@ export interface WatchlistStockItem {
   strategyTag: string;             // 選入之策略名稱 (例: 'Bottom-Up 四面向全能', '投信作帳突破')
   notes?: string;
   addedAt: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  createdAt: string;
+}
+
+// ==========================================
+// 8. 存錢計畫 (Savings Goals / Target Vaults)
+// ==========================================
+
+export type SavingsGoalCategory =
+  | 'house_downpayment' // 買房頭期款
+  | 'car_purchase'      // 購車基金
+  | 'travel'            // 旅遊玩樂
+  | 'emergency_fund'    // 緊急備用金
+  | 'education'         // 進修與留學
+  | 'retirement'        // 退休養老
+  | 'custom';           // 自訂計畫
+
+export interface SavingsGoal {
+  id: string;
+  title: string;                   // 計畫名稱 (例: '買房頭期款 200萬', '日本賞楓 10萬')
+  category: SavingsGoalCategory;
+  emoji: string;
+  targetAmount: number;            // 目標總金額 (TWD)
+  currentAmount: number;           // 目前已存金額 (TWD)
+  targetDate: string;              // 預計達成日 YYYY-MM-DD
+  linkedAccountId?: string;        // 專款專用綁定之銀行/數位帳戶 ID (選填)
+  monthlyPlannedContribution?: number; // 每月預計提撥金額
+  colorHex: string;
+  notes?: string;
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
+// 9. 貸款試算與正式合約 (Loan & Debt Engine)
+// ==========================================
+
+export type LoanType = 'mortgage' | 'car' | 'personal' | 'revolving';
+export type RepaymentMethod = 'equal_payment' | 'equal_principal' | 'grace_period' | 'interest_only';
+export type RateType = 'fixed' | 'floating' | 'tiered';
+
+export interface LoanTierRate {
+  startMonth: number;              // 起始期數 (例: 1)
+  endMonth: number;                // 結束期數 (例: 36)
+  annualRatePct: number;           // 該階段年利率 % (例: 1.775)
+}
+
+export interface LoanSchedulePeriod {
+  period: number;                 // 期數 (第 1 期 ... 第 360 期)
+  paymentDate: string;            // 應繳日期 YYYY-MM-DD
+  totalPayment: number;           // 本期應繳總額
+  principalPayment: number;       // 本期應還本金 (減少貸款本金負債)
+  interestPayment: number;        // 本期利息支出 (計入日常記帳生活花費)
+  remainingPrincipal: number;     // 繳後剩餘本金
+  isPaid: boolean;                // 是否已繳納
+  paidDate?: string;              // 實際繳納日期
+  linkedTransactionId?: string;   // 連動記帳之 Transaction ID
+}
+
+export interface LoanContract {
+  id: string;
+  title: string;                  // 貸款名稱 (例: '新青安房貸-青埔', 'Model Y 購車分期')
+  loanType: LoanType;             // 房貸 | 車貸 | 信貸 | 理財型
+  bankName: string;               // 承辦銀行 (例: '臺灣銀行', '玉山銀行')
+  totalPrincipal: number;         // 原始貸款總本金 (例: 10000000)
+  currentRemainingPrincipal: number; // 目前剩餘未償本金
+  totalMonths: number;            // 總期數 (例: 360 個月 / 30 年)
+  repaymentMethod: RepaymentMethod; // 還款模式 (本息均攤 / 本金均攤 / 寬限期 / 先還利息)
+  gracePeriodMonths: number;      // 寬限期月數 (例: 36 或 60)
+  annualRatePct: number;          // 基準年利率 % (例: 2.185)
+  rateType: RateType;             // 固定 / 浮動 / 階梯
+  tieredRates?: LoanTierRate[];   // 階梯利率分段設定
+  startDate: string;              // 起貸日 YYYY-MM-DD
+  monthlyPaymentDay: number;      // 每月扣款日 (1-31)
+  autoDeductAccountId?: string;   // 綁定扣繳之銀行帳戶 ID
+  schedule: LoanSchedulePeriod[]; // 逐期攤還表
+  notes?: string;
+  status: 'active' | 'settled';
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ==========================================
+// 10. 投資報酬率演算法與 ETF 專區
+// ==========================================
+
+export interface EtfHoldingPenetration {
+  symbol: string;                 // 成分股代號 (例: '2330.TW', 'NVDA')
+  name: string;                   // 成分股名稱 (例: '台積電', '輝達')
+  weightPct: number;              // 佔 ETF 權重百分比 (例: 56.4)
+  sector: string;                 // 產業族群 (例: '半導體', '科技')
+}
+
+export interface EtfProfile {
+  symbol: string;                 // ETF 代號 (例: '0050.TW', 'VOO', '00878.TW')
+  name: string;                   // ETF 名稱 (例: '元大台灣50', '國泰永續高股息')
+  category: 'market_cap' | 'high_dividend' | 'bond' | 'tech_theme' | 'us_broad';
+  issuer: string;                 // 發行投信 (例: '元大投信', '國泰投信', 'Vanguard')
+  expenseRatioPct: number;        // 總內扣費用率 % (例: 0.32, 0.03)
+  topHoldings: EtfHoldingPenetration[]; // 前十大成分股
+  dividendFrequency: DividendFrequency;
+  dividendMonths: number[];       // 配息月份
+  nav: number;                    // 官方淨值 (TWD/USD)
+  marketPrice: number;            // 市價
+  premiumDiscountPct: number;     // 折溢價率 % (市價 - 淨值) / 淨值 * 100
+  dividendYieldPct: number;       // 年化殖利率 %
+  description: string;
+}
+
+export interface InvestmentPeriodReturn {
+  label: string;                  // '2024 Q1', '2024 Q2', '2024 全部', '2025 年'
+  periodType: 'quarter' | 'year' | 'standard';
+  startValue: number;
+  endValue: number;
+  cashFlow: number;               // 淨入金 (+) 或 出金 (-)
+  returnTwd: number;              // 絕對獲利金額
+  twrrPct: number;                // 時間加權報酬率 %
+  benchmarkTaiexPct?: number;     // 同期加權指數報酬 %
+  alphaPct?: number;              // 超額報酬 %
+}
+
+export interface InvestmentReturnSummary {
+  twrrPct: number;                // 總累積時間加權報酬率 % (排除出入金)
+  mwrrPct: number;                // 金額加權報酬率 / 內部報酬率 IRR %
+  simpleReturnPct: number;        // 簡單持有報酬率 %
+  cagrPct: number;                // 年化複合成長率 %
+  totalCostTwd: number;           // 累計投入本金 (TWD)
+  currentMarketValueTwd: number;  // 目前持倉總現值 (TWD)
+  totalPnlTwd: number;            // 未實現損益 (TWD)
+  totalDividendsTwd: number;      // 累計已領股息/債息 (TWD)
+  benchmarkTaiexPct: number;      // 大盤加權指數對比 %
+  alphaTaiexPct: number;          // 對比大盤超額 Alpha %
+  periodBreakdowns: InvestmentPeriodReturn[];
 }
 

@@ -36,6 +36,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     medicalRecords,
     manualCalendarEvents,
     securityHoldings,
+    loans,
     isQuoteSyncing,
     refreshQuotes,
     exchangeRateUsdTwd,
@@ -62,6 +63,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     vehicles,
     policies: insurancePolicies,
     medicalRecords,
+    loans,
   })
     .filter((ev) => ev.date >= todayStr && ev.date <= future14Str)
     .slice(0, 6);

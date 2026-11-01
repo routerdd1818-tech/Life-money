@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import {
+  Bike,
   Car,
+  Edit3,
   ExternalLink,
   Gauge,
   HeartPulse,
@@ -8,18 +10,69 @@ import {
   Plus,
   ShieldCheck,
   Trash2,
+  Truck,
   Wrench,
+  X,
+  Zap,
 } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
 import { AttachmentPicker } from '../components/AttachmentPicker';
-import { InsuranceCategory, PaymentSourceType, PolicyPaymentCycle } from '../types';
+import {
+  InsuranceCategory,
+  PaymentSourceType,
+  PolicyPaymentCycle,
+  VehicleProfile,
+  VehicleType,
+} from '../types';
 
 type LifeSubTab = 'vehicle' | 'insurance' | 'medical';
+
+const VEHICLE_TYPE_META: Record<VehicleType, { label: string; emoji: string }> = {
+  sedan: { label: '轎車 / 掀背車', emoji: '🚗' },
+  suv: { label: '休旅車 SUV', emoji: '🚙' },
+  mpv: { label: '廂型車 / 商務 MPV', emoji: '🚐' },
+  scooter: { label: '白牌普通重機', emoji: '🛵' },
+  heavy_motor: { label: '黃/紅牌大型重機', emoji: '🏍️' },
+  electric: { label: '純電動車 EV', emoji: '⚡' },
+  truck: { label: '貨車 / 其他', emoji: '🚚' },
+};
+
+const generateDefaultConsumables = (type: VehicleType, currentKm: number) => {
+  if (type === 'electric') {
+    return [
+      { id: 'c-cabin-filter', itemName: '冷氣/HEPA高效濾網', intervalKm: 20000, lastReplacedMileage: Math.max(0, currentKm - 8000), lastReplacedDate: '2025-08-01' },
+      { id: 'c-brake-fluid', itemName: '煞車油與管路檢測', intervalKm: 40000, lastReplacedMileage: Math.max(0, currentKm - 15000), lastReplacedDate: '2025-03-10' },
+      { id: 'c-tires', itemName: '四輪輪胎胎紋深度', intervalKm: 40000, lastReplacedMileage: Math.max(0, currentKm - 22000), lastReplacedDate: '2024-11-15' },
+      { id: 'c-coolant', itemName: '三電系統專用冷卻液', intervalKm: 80000, lastReplacedMileage: Math.max(0, currentKm - 10000), lastReplacedDate: '2025-01-20' },
+      { id: 'c-12v-battery', itemName: '低壓 12V 輔助電瓶', intervalKm: 50000, lastReplacedMileage: Math.max(0, currentKm - 15000), lastReplacedDate: '2024-06-01' },
+    ];
+  }
+  if (type === 'scooter' || type === 'heavy_motor') {
+    return [
+      { id: 'c-oil', itemName: '機油更換', intervalKm: type === 'scooter' ? 1500 : 3000, lastReplacedMileage: Math.max(0, currentKm - 800), lastReplacedDate: '2026-01-10' },
+      { id: 'c-gear-oil', itemName: '齒輪油更換', intervalKm: 3000, lastReplacedMileage: Math.max(0, currentKm - 1200), lastReplacedDate: '2025-11-15' },
+      { id: 'c-air-filter', itemName: '空濾棉清潔更換', intervalKm: 5000, lastReplacedMileage: Math.max(0, currentKm - 2500), lastReplacedDate: '2025-09-01' },
+      { id: 'c-spark-plug', itemName: '火星塞點火檢查', intervalKm: 10000, lastReplacedMileage: Math.max(0, currentKm - 4000), lastReplacedDate: '2025-05-20' },
+      { id: 'c-belt', itemName: '傳動皮帶/普利珠磨耗', intervalKm: 20000, lastReplacedMileage: Math.max(0, currentKm - 12000), lastReplacedDate: '2024-10-10' },
+      { id: 'c-tires', itemName: '前後輪胎胎紋深度', intervalKm: 12000, lastReplacedMileage: Math.max(0, currentKm - 6000), lastReplacedDate: '2025-04-12' },
+    ];
+  }
+  return [
+    { id: 'c-oil', itemName: '全合成機油與機油芯', intervalKm: 10000, lastReplacedMileage: Math.max(0, currentKm - 4800), lastReplacedDate: '2025-12-10' },
+    { id: 'c-trans-fluid', itemName: '變速箱油 (ATF/CVT)', intervalKm: 40000, lastReplacedMileage: Math.max(0, currentKm - 22000), lastReplacedDate: '2024-08-15' },
+    { id: 'c-brake-fluid', itemName: '煞車油 DOT4', intervalKm: 20000, lastReplacedMileage: Math.max(0, currentKm - 16000), lastReplacedDate: '2024-11-20' },
+    { id: 'c-air-filter', itemName: '引擎進氣與冷氣濾網', intervalKm: 10000, lastReplacedMileage: Math.max(0, currentKm - 6000), lastReplacedDate: '2025-06-12' },
+    { id: 'c-coolant', itemName: '水箱長效防凍冷卻液', intervalKm: 50000, lastReplacedMileage: Math.max(0, currentKm - 35000), lastReplacedDate: '2023-09-10' },
+    { id: 'c-battery', itemName: '電瓶 (AGM/EFB 蓄電量)', intervalKm: 40000, lastReplacedMileage: Math.max(0, currentKm - 18000), lastReplacedDate: '2024-05-18' },
+    { id: 'c-tires', itemName: '四輪輪胎磨耗與胎紋', intervalKm: 40000, lastReplacedMileage: Math.max(0, currentKm - 28000), lastReplacedDate: '2024-02-14' },
+  ];
+};
 
 export const LifeVaultView: React.FC = () => {
   const {
     vehicles,
     upsertVehicle,
+    deleteVehicle,
     addVehicleMaintenanceLog,
     insurancePolicies,
     upsertInsurancePolicy,
@@ -32,7 +85,98 @@ export const LifeVaultView: React.FC = () => {
   } = useVault();
 
   const [subTab, setSubTab] = useState<LifeSubTab>('vehicle');
-  const activeVehicle = vehicles[0];
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(vehicles[0]?.id || '');
+  const activeVehicle = vehicles.find((v) => v.id === selectedVehicleId) || vehicles[0];
+
+  // 0. 車輛新增與編輯狀態
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [vehName, setVehName] = useState('');
+  const [vehType, setVehType] = useState<VehicleType>('suv');
+  const [vehPlate, setVehPlate] = useState('');
+  const [vehBrand, setVehBrand] = useState('');
+  const [vehModel, setVehModel] = useState('');
+  const [vehCc, setVehCc] = useState('');
+  const [vehMileage, setVehMileage] = useState('');
+  const [vehNextInsp, setVehNextInsp] = useState('');
+  const [vehInsurExp, setVehInsurExp] = useState('');
+
+  const openCreateVehicleModal = () => {
+    setEditingVehicleId(null);
+    setVehName('');
+    setVehType('suv');
+    setVehPlate('');
+    setVehBrand('');
+    setVehModel('');
+    setVehCc('2000');
+    setVehMileage('30000');
+    setVehNextInsp('');
+    setVehInsurExp('');
+    setShowVehicleModal(true);
+  };
+
+  const openEditVehicleModal = (v: VehicleProfile) => {
+    setEditingVehicleId(v.id);
+    setVehName(v.name);
+    setVehType(v.vehicleType || 'suv');
+    setVehPlate(v.licensePlate || '');
+    setVehBrand(v.brand || '');
+    setVehModel(v.modelName || '');
+    setVehCc(v.displacementCc ? String(v.displacementCc) : '');
+    setVehMileage(String(v.currentMileage || 0));
+    setVehNextInsp(v.nextInspectionDate || '');
+    setVehInsurExp(v.insuranceExpiryDate || '');
+    setShowVehicleModal(true);
+  };
+
+  const handleSaveVehicle = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vehPlate.trim() || !vehName.trim()) return;
+
+    const km = Number(vehMileage) || 0;
+    const cc = vehCc ? Number(vehCc) : undefined;
+    const cleanPlate = vehPlate.trim().toUpperCase();
+
+    if (editingVehicleId) {
+      const existing = vehicles.find((v) => v.id === editingVehicleId);
+      if (existing) {
+        upsertVehicle({
+          ...existing,
+          name: vehName.trim(),
+          vehicleType: vehType,
+          licensePlate: cleanPlate,
+          brand: vehBrand.trim() || undefined,
+          modelName: vehModel.trim() || undefined,
+          displacementCc: cc,
+          currentMileage: km,
+          nextInspectionDate: vehNextInsp || undefined,
+          insuranceExpiryDate: vehInsurExp || undefined,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } else {
+      const newId = `veh-${Date.now()}`;
+      const newVeh: VehicleProfile = {
+        id: newId,
+        name: vehName.trim(),
+        vehicleType: vehType,
+        licensePlate: cleanPlate,
+        brand: vehBrand.trim() || undefined,
+        modelName: vehModel.trim() || undefined,
+        displacementCc: cc,
+        currentMileage: km,
+        nextInspectionDate: vehNextInsp || undefined,
+        insuranceExpiryDate: vehInsurExp || undefined,
+        consumables: generateDefaultConsumables(vehType, km),
+        logs: [],
+        updatedAt: new Date().toISOString(),
+      };
+      upsertVehicle(newVeh);
+      setSelectedVehicleId(newId);
+    }
+
+    setShowVehicleModal(false);
+  };
 
   // 1. 汽車保養表單狀態
   const [showAddMaint, setShowAddMaint] = useState(false);
@@ -130,56 +274,165 @@ export const LifeVaultView: React.FC = () => {
       {/* =======================================================
           1. 汽車保養資訊紀錄與零件耗材預警
          ======================================================= */}
-      {subTab === 'vehicle' && activeVehicle && (
+      {subTab === 'vehicle' && (
         <div className="space-y-4">
-          {/* 愛車主卡 */}
-          <div className="toss-card p-4 space-y-3">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#2563EB] flex items-center justify-center">
-                  <Car className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                    {activeVehicle.name}{' '}
-                    <span className="px-2 py-0.5 rounded-md bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-mono">
-                      {activeVehicle.licensePlate}
-                    </span>
-                  </div>
-                  <div className="text-xs text-[#8B95A1] tabular-nums">
-                    下次驗車：{activeVehicle.nextInspectionDate || '未設定'} · 車險到期：
-                    {activeVehicle.insuranceExpiryDate || '未設定'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-right tabular-nums">
-                <div className="text-xs text-[#8B95A1]">目前總里程</div>
-                <div className="text-lg font-bold text-[#2563EB]">
-                  {activeVehicle.currentMileage.toLocaleString()} km
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextKm = prompt(
-                      '更新目前愛車總里程數 (km)：',
-                      String(activeVehicle.currentMileage)
-                    );
-                    if (nextKm && !Number.isNaN(Number(nextKm))) {
-                      upsertVehicle({
-                        ...activeVehicle,
-                        currentMileage: Number(nextKm),
-                        updatedAt: new Date().toISOString(),
-                      });
-                    }
-                  }}
-                  className="text-[11px] font-semibold text-[#2563EB] underline"
-                >
-                  更新里程
-                </button>
-              </div>
+          {/* 車輛選擇與管理切換列 */}
+          <div className="toss-card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {vehicles.map((v) => {
+                const meta = VEHICLE_TYPE_META[v.vehicleType || 'suv'] || {
+                  label: '車輛',
+                  emoji: '🚗',
+                };
+                const isSelected = v.id === activeVehicle?.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setSelectedVehicleId(v.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors ${
+                      isSelected
+                        ? 'bg-[#2563EB] text-white shadow-2xs font-bold'
+                        : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28]'
+                    }`}
+                  >
+                    <span>{meta.emoji}</span>
+                    <span>{v.name}</span>
+                    <span className="font-mono text-[11px] opacity-80">[{v.licensePlate}]</span>
+                  </button>
+                );
+              })}
             </div>
+
+            <button
+              type="button"
+              onClick={openCreateVehicleModal}
+              className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-xs font-semibold flex items-center justify-center gap-1.5 text-[#2563EB] hover:bg-[#F6F7F9] dark:hover:bg-[#1F2631] shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>新增愛車 (汽/機/電車)</span>
+            </button>
           </div>
+
+          {!activeVehicle ? (
+            <div className="toss-card p-8 text-center space-y-3">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] flex items-center justify-center">
+                <Car className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                  尚未建立任何愛車資料
+                </h4>
+                <p className="text-xs text-[#8B95A1] mt-1">
+                  支援休旅車、轎車、普通重機、大型重機、純電動車等車型與保養零件耗材監控
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openCreateVehicleModal}
+                className="px-4 py-2 rounded-xl bg-[#2563EB] text-white text-xs font-semibold inline-flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>立即建立第一輛車</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* 愛車主卡 */}
+              <div className="toss-card p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-[#2563EB] flex items-center justify-center text-xl shrink-0">
+                      {VEHICLE_TYPE_META[activeVehicle.vehicleType || 'suv']?.emoji || '🚗'}
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                          {activeVehicle.name}
+                        </span>
+                        {/* 仿實體車牌框 */}
+                        <span className="px-2 py-0.5 rounded-md border border-[#191F28] dark:border-white font-mono font-bold text-xs tracking-wider bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-2xs">
+                          {activeVehicle.licensePlate}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-[10px] font-semibold text-[#2563EB]">
+                          {VEHICLE_TYPE_META[activeVehicle.vehicleType || 'suv']?.label || '車輛'}
+                        </span>
+                        {activeVehicle.brand && (
+                          <span className="px-2 py-0.5 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] font-medium text-[#4E5968] dark:text-[#9BA4B0]">
+                            {activeVehicle.brand} {activeVehicle.modelName || ''}
+                          </span>
+                        )}
+                        {activeVehicle.displacementCc && (
+                          <span className="text-[11px] text-[#8B95A1] tabular-nums">
+                            {activeVehicle.displacementCc} cc
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-[#8B95A1] tabular-nums mt-1.5 flex flex-wrap items-center gap-3">
+                        <span>下次驗車：{activeVehicle.nextInspectionDate || '未設定'}</span>
+                        <span>車險到期：{activeVehicle.insuranceExpiryDate || '未設定'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right tabular-nums shrink-0">
+                    <div className="text-xs text-[#8B95A1]">目前總里程</div>
+                    <div className="text-lg font-bold text-[#2563EB]">
+                      {activeVehicle.currentMileage.toLocaleString()} km
+                    </div>
+                    <div className="flex items-center justify-end gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextKm = prompt(
+                            '更新目前愛車總里程數 (km)：',
+                            String(activeVehicle.currentMileage)
+                          );
+                          if (nextKm && !Number.isNaN(Number(nextKm))) {
+                            upsertVehicle({
+                              ...activeVehicle,
+                              currentMileage: Number(nextKm),
+                              updatedAt: new Date().toISOString(),
+                            });
+                          }
+                        }}
+                        className="text-[11px] font-semibold text-[#2563EB] underline"
+                      >
+                        更新里程
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEditVehicleModal(activeVehicle)}
+                        className="text-[11px] font-semibold text-[#4E5968] dark:text-[#9BA4B0] hover:text-[#191F28] flex items-center gap-0.5"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>編輯</span>
+                      </button>
+                      {vehicles.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `確定要刪除車輛「${activeVehicle.name} (${activeVehicle.licensePlate})」嗎？`
+                              )
+                            ) {
+                              deleteVehicle(activeVehicle.id);
+                              setSelectedVehicleId(
+                                vehicles.find((v) => v.id !== activeVehicle.id)?.id || ''
+                              );
+                            }
+                          }}
+                          className="text-[11px] font-semibold text-rose-500 hover:text-rose-600"
+                        >
+                          刪除
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
           {/* 耗材更換里程雙軌追蹤 */}
           <div className="toss-card p-4 space-y-3">
@@ -502,6 +755,8 @@ export const LifeVaultView: React.FC = () => {
               </div>
             ))}
           </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1179,6 +1434,200 @@ export const LifeVaultView: React.FC = () => {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 車輛建立與編輯彈跳視窗 */}
+      {showVehicleModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setShowVehicleModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-white dark:bg-[#161B22] rounded-2xl border border-[#EAEDF2] dark:border-[#262C36] p-5 max-h-[90vh] overflow-y-auto shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#EAEDF2] dark:border-[#262C36] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                  {editingVehicleId ? '編輯愛車資訊' : '新增愛車 (汽/機/電動車)'}
+                </h3>
+                <p className="text-xs text-[#8B95A1]">
+                  設定車型、車牌號碼與目前里程，系統將自動啟動零件耗材更換週期監控
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVehicleModal(false)}
+                className="p-1.5 rounded-lg text-[#8B95A1] hover:bg-[#F0F2F6] dark:hover:bg-[#1F2631]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVehicle} className="space-y-4">
+              {/* 車型選擇 */}
+              <div>
+                <label className="block text-xs font-bold text-[#4E5968] dark:text-[#9BA4B0] mb-2">
+                  選擇車型種類 (影響保養耗材規則推算)
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(
+                    [
+                      { type: 'suv', label: '休旅車 SUV', emoji: '🚙' },
+                      { type: 'sedan', label: '轎車 / 掀背', emoji: '🚗' },
+                      { type: 'electric', label: '純電動車 EV', emoji: '⚡' },
+                      { type: 'scooter', label: '普通重型機車', emoji: '🛵' },
+                      { type: 'heavy_motor', label: '大型重機(紅/黃)', emoji: '🏍️' },
+                      { type: 'mpv', label: '廂型 / MPV', emoji: '🚐' },
+                      { type: 'truck', label: '貨車 / 其他', emoji: '🚚' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      onClick={() => setVehType(opt.type)}
+                      className={`p-2.5 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
+                        vehType === opt.type
+                          ? 'border-[#2563EB] bg-blue-50/60 dark:bg-blue-950/40 text-[#2563EB] font-bold shadow-2xs'
+                          : 'border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0] hover:bg-[#F6F7F9] dark:hover:bg-[#1F2631]'
+                      }`}
+                    >
+                      <span className="text-xl">{opt.emoji}</span>
+                      <span className="text-[11px]">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 車牌號碼 & 車輛自訂名稱 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8] mb-1">
+                    車牌號碼 <span className="text-[#F04452]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={vehPlate}
+                    onChange={(e) => setVehPlate(e.target.value.toUpperCase())}
+                    placeholder="例: ABC-8899 或 MMB-1234"
+                    className="toss-input font-mono uppercase font-bold tracking-wider"
+                  />
+                  <span className="text-[10px] text-[#8B95A1] mt-0.5 block">
+                    輸入完整車牌 (含英文字母與連字號)
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8] mb-1">
+                    車輛自訂暱稱 <span className="text-[#F04452]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={vehName}
+                    onChange={(e) => setVehName(e.target.value)}
+                    placeholder="例: 小紅 RAV4、家庭用車、通勤勁戰"
+                    className="toss-input"
+                  />
+                </div>
+              </div>
+
+              {/* 廠牌 & 車款型號 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-[#8B95A1] mb-1">廠牌 (Brand)</label>
+                  <input
+                    type="text"
+                    value={vehBrand}
+                    onChange={(e) => setVehBrand(e.target.value)}
+                    placeholder="例: Toyota, SYM, Tesla"
+                    className="toss-input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#8B95A1] mb-1">車款型號 (Model)</label>
+                  <input
+                    type="text"
+                    value={vehModel}
+                    onChange={(e) => setVehModel(e.target.value)}
+                    placeholder="例: RAV4 Hybrid 2.5, Model Y"
+                    className="toss-input"
+                  />
+                </div>
+              </div>
+
+              {/* 目前里程 & 排氣量 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#191F28] dark:text-[#F2F4F8] mb-1">
+                    目前行駛總里程 (km)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={vehMileage}
+                    onChange={(e) => setVehMileage(e.target.value)}
+                    placeholder="例: 50000"
+                    className="toss-input tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#8B95A1] mb-1">
+                    排氣量 (cc) / 馬力 (電動車免填)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={vehCc}
+                    onChange={(e) => setVehCc(e.target.value)}
+                    placeholder="例: 1987 (機車例: 158)"
+                    className="toss-input tabular-nums"
+                  />
+                </div>
+              </div>
+
+              {/* 下次驗車日 & 車險到期日 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-[#8B95A1] mb-1">下次定檢/驗車日</label>
+                  <input
+                    type="date"
+                    value={vehNextInsp}
+                    onChange={(e) => setVehNextInsp(e.target.value)}
+                    className="toss-input tabular-nums text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#8B95A1] mb-1">車險/強制險到期日</label>
+                  <input
+                    type="date"
+                    value={vehInsurExp}
+                    onChange={(e) => setVehInsurExp(e.target.value)}
+                    className="toss-input tabular-nums text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowVehicleModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-[#EAEDF2] dark:border-[#262C36] text-xs font-semibold hover:bg-[#F6F7F9] dark:hover:bg-[#1F2631]"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold"
+                >
+                  {editingVehicleId ? '儲存變更' : '建立車輛並套用保養監控'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

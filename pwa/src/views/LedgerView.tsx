@@ -1,18 +1,40 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  AlertCircle,
+  ArrowRight,
+  Calculator,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CreditCard as CreditCardIcon,
+  Landmark,
   Plus,
   Repeat,
+  Sparkles,
   SplitSquareVertical,
   Trash2,
   Users,
 } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
 import { getCreditCardUtilization } from '../services/financeEngine';
-import { DebtType, PaymentSourceType, RecurrenceCycle } from '../types';
+import {
+  calculateCarLoanZeroRateVsCashDiscount,
+  calculateLoanSchedule,
+  calculateRefinanceSavings,
+  LOAN_MARKET_PRESETS,
+} from '../services/loanEngine';
+import {
+  DebtType,
+  LoanContract,
+  LoanType,
+  PaymentSourceType,
+  RateType,
+  RecurrenceCycle,
+  RepaymentMethod,
+} from '../types';
 
-type LedgerSubTab = 'transactions' | 'cards' | 'installments' | 'debts' | 'recurring';
+type LedgerSubTab = 'transactions' | 'cards' | 'installments' | 'debts' | 'loans' | 'recurring';
 
 interface LedgerViewProps {
   onOpenQuickEntry: () => void;
@@ -39,9 +61,82 @@ export const LedgerView: React.FC<LedgerViewProps> = ({ onOpenQuickEntry }) => {
     deleteRecurringItem,
     triggerRecurringItemNow,
     assetAccounts,
+    loans,
+    upsertLoan,
+    deleteLoan,
+    recordLoanPayment,
   } = useVault();
 
   const [subTab, setSubTab] = useState<LedgerSubTab>('transactions');
+
+  // 貸款試算與攤還狀態
+  const [loanMode, setLoanMode] = useState<'contracts' | 'simulator'>('contracts');
+  const [loanTitle, setLoanTitle] = useState('青埔自住 新青安房貸');
+  const [loanType, setLoanType] = useState<LoanType>('mortgage');
+  const [loanBank, setLoanBank] = useState('臺灣銀行');
+  const [loanPrincipal, setLoanPrincipal] = useState('10000000');
+  const [loanMonths, setLoanMonths] = useState('480');
+  const [loanRatePct, setLoanRatePct] = useState('1.775');
+  const [loanRepaymentMethod, setLoanRepaymentMethod] = useState<RepaymentMethod>('grace_period');
+  const [loanGraceMonths, setLoanGraceMonths] = useState('60');
+  const [loanStartDate, setLoanStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [loanPaymentDay, setLoanPaymentDay] = useState('10');
+  const [loanAutoPayAccId, setLoanAutoPayAccId] = useState(assetAccounts[0]?.id || '');
+  const [loanExpandedContractId, setLoanExpandedContractId] = useState<string | null>(
+    loans[0]?.id || null
+  );
+  const [loanSelectedPresetId, setLoanSelectedPresetId] = useState('preset-qing-an');
+
+  // 車貸 0 利率與轉貸評估狀態
+  const [carCashDiscount, setCarCashDiscount] = useState('60000');
+  const [showCarIrrTool, setShowCarIrrTool] = useState(false);
+  const [refinanceSwitchingCost, setRefinanceSwitchingCost] = useState('25000');
+  const [refinanceNewRate, setRefinanceNewRate] = useState('2.185');
+  const [showRefinanceTool, setShowRefinanceTool] = useState(false);
+
+  // 貸款即時試算
+  const simulatedLoanResult = useMemo(() => {
+    return calculateLoanSchedule({
+      totalPrincipal: Number(loanPrincipal) || 0,
+      totalMonths: Number(loanMonths) || 12,
+      annualRatePct: Number(loanRatePct) || 0,
+      repaymentMethod: loanRepaymentMethod,
+      gracePeriodMonths: Number(loanGraceMonths) || 0,
+      startDate: loanStartDate,
+      monthlyPaymentDay: Number(loanPaymentDay) || 1,
+    });
+  }, [
+    loanPrincipal,
+    loanMonths,
+    loanRatePct,
+    loanRepaymentMethod,
+    loanGraceMonths,
+    loanStartDate,
+    loanPaymentDay,
+  ]);
+
+  // 車貸 0 利率真實 IRR 試算
+  const carIrrResult = useMemo(() => {
+    if (loanType !== 'car') return null;
+    return calculateCarLoanZeroRateVsCashDiscount({
+      carPrice: Number(loanPrincipal) || 700000,
+      zeroRateLoanAmount: Number(loanPrincipal) || 700000,
+      zeroRatePeriods: Number(loanMonths) || 36,
+      cashDiscountAmount: Number(carCashDiscount) || 0,
+    });
+  }, [loanType, loanPrincipal, loanMonths, carCashDiscount]);
+
+  // 轉增貸評估試算
+  const refinanceResult = useMemo(() => {
+    return calculateRefinanceSavings({
+      currentRemaining: Number(loanPrincipal) || 10000000,
+      currentRatePct: Number(loanRatePct) || 2.45,
+      remainingMonths: Number(loanMonths) || 360,
+      newRatePct: Number(refinanceNewRate) || 2.185,
+      newTotalMonths: Number(loanMonths) || 360,
+      switchingCosts: Number(refinanceSwitchingCost) || 25000,
+    });
+  }, [loanPrincipal, loanRatePct, loanMonths, refinanceNewRate, refinanceSwitchingCost]);
 
   // 新增信用卡表單狀態
   const [showAddCard, setShowAddCard] = useState(false);
@@ -102,13 +197,14 @@ export const LedgerView: React.FC<LedgerViewProps> = ({ onOpenQuickEntry }) => {
   return (
     <div className="space-y-4 pb-24">
       {/* 頂部子分頁切換器 */}
-      <div className="toss-pill-bar">
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#EBEFE6]/50 dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] overflow-x-auto no-scrollbar">
         {(
           [
             { id: 'transactions', label: '日常收支' },
-            { id: 'cards', label: '信用卡增減' },
+            { id: 'cards', label: '信用卡' },
             { id: 'installments', label: '分期紀錄' },
-            { id: 'debts', label: '借放款紀錄' },
+            { id: 'debts', label: '借放款' },
+            { id: 'loans', label: '🏦 貸款試算攤還' },
             { id: 'recurring', label: '固定收支' },
           ] as const
         ).map((tab) => (
@@ -116,8 +212,10 @@ export const LedgerView: React.FC<LedgerViewProps> = ({ onOpenQuickEntry }) => {
             key={tab.id}
             type="button"
             onClick={() => setSubTab(tab.id)}
-            className={`toss-pill-btn flex-1 ${
-              subTab === tab.id ? 'toss-pill-btn-active' : 'toss-pill-btn-inactive'
+            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 shrink-0 ${
+              subTab === tab.id
+                ? 'bg-white dark:bg-[#21262D] text-[#191F28] dark:text-[#F2F4F8] shadow-sm font-bold'
+                : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
             }`}
           >
             {tab.label}
@@ -997,7 +1095,604 @@ export const LedgerView: React.FC<LedgerViewProps> = ({ onOpenQuickEntry }) => {
         </div>
       )}
 
-      {/* 5. 固定支出與固定收入 */}
+      {/* 5. 🏦 貸款試算、還款進度與雙軌記帳 (Loans & Amortization) */}
+      {subTab === 'loans' && (
+        <div className="space-y-4">
+          {/* 模式切換按鈕 */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-1 bg-[#F0F2F6] dark:bg-[#1F2631] p-1 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setLoanMode('contracts')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  loanMode === 'contracts'
+                    ? 'bg-white dark:bg-[#262C36] shadow-sm text-[#2563EB]'
+                    : 'text-[#8B95A1]'
+                }`}
+              >
+                📋 正式貸款合約 ({loans.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoanMode('simulator')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  loanMode === 'simulator'
+                    ? 'bg-white dark:bg-[#262C36] shadow-sm text-[#2563EB]'
+                    : 'text-[#8B95A1]'
+                }`}
+              >
+                🏦 房貸車貸試算機
+              </button>
+            </div>
+            {loanMode === 'contracts' && (
+              <button
+                type="button"
+                onClick={() => setLoanMode('simulator')}
+                className="px-3 py-1.5 rounded-xl bg-[#2563EB] text-white text-xs font-semibold flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>新增貸款試算</span>
+              </button>
+            )}
+          </div>
+
+          {/* 模式一：正式貸款合約管理 (我的貸款負債) */}
+          {loanMode === 'contracts' && (
+            <div className="space-y-4">
+              <div className="toss-card p-4 flex items-center justify-between">
+                <div className="tabular-nums">
+                  <div className="text-xs text-[#8B95A1]">生效中貸款未償本金總負債</div>
+                  <div className="text-2xl font-bold text-[#F04452]">
+                    -NT${' '}
+                    {loans
+                      .filter((l) => l.status === 'active')
+                      .reduce((sum, l) => sum + l.currentRemainingPrincipal, 0)
+                      .toLocaleString()}
+                  </div>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] font-bold">
+                  {loans.filter((l) => l.status === 'active').length} 筆履約中
+                </span>
+              </div>
+
+              {loans.length === 0 ? (
+                <div className="toss-card p-8 text-center text-xs text-[#8B95A1] space-y-2">
+                  <Landmark className="w-8 h-8 text-[#8B95A1] mx-auto opacity-40" />
+                  <div>目前尚無正式貸款合約</div>
+                  <button
+                    type="button"
+                    onClick={() => setLoanMode('simulator')}
+                    className="px-3 py-1.5 rounded-xl bg-[#2563EB] text-white font-semibold text-xs inline-block mt-1"
+                  >
+                    開啟房貸/車貸試算並建立合約
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {loans.map((loan) => {
+                    const nextUnpaidPeriod =
+                      loan.schedule.find((s) => !s.isPaid) || loan.schedule[loan.schedule.length - 1];
+                    const paidCount = loan.schedule.filter((s) => s.isPaid).length;
+                    const progressPct = Math.round((paidCount / loan.totalMonths) * 100);
+                    const isExpanded = loanExpandedContractId === loan.id;
+
+                    return (
+                      <div key={loan.id} className="toss-card p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-sm font-bold text-[#2563EB]">
+                                🏦
+                              </span>
+                              <div>
+                                <h4 className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8] flex items-center gap-1.5">
+                                  <span>{loan.title}</span>
+                                  {loan.status === 'settled' && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">
+                                      已全數清償 🎉
+                                    </span>
+                                  )}
+                                </h4>
+                                <div className="text-xs text-[#8B95A1] tabular-nums mt-0.5">
+                                  {loan.bankName} · 年利率 {loan.annualRatePct}% ·{' '}
+                                  {loan.repaymentMethod === 'grace_period'
+                                    ? `寬限期 ${loan.gracePeriodMonths} 月`
+                                    : loan.repaymentMethod === 'equal_payment'
+                                      ? '本息均攤'
+                                      : loan.repaymentMethod === 'equal_principal'
+                                        ? '本金均攤'
+                                        : '先還利息'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right tabular-nums">
+                            <div className="text-base font-bold text-[#F04452]">
+                              剩餘 NT$ {loan.currentRemainingPrincipal.toLocaleString()}
+                            </div>
+                            <div className="text-xs text-[#8B95A1]">
+                              總額 NT$ {loan.totalPrincipal.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 還款進度條 */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs tabular-nums text-[#8B95A1]">
+                            <span>
+                              已還 {paidCount} / {loan.totalMonths} 期 ({progressPct}%)
+                            </span>
+                            <span>每月 {loan.monthlyPaymentDay} 日扣款</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-[#EAEDF2] dark:bg-[#262C36] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-[#2563EB] transition-all duration-300"
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 當期應繳款項與一鍵雙軌記帳扣款 */}
+                        {loan.status === 'active' && nextUnpaidPeriod && (
+                          <div className="p-3 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] flex items-center justify-between gap-3 text-xs tabular-nums">
+                            <div>
+                              <div className="font-bold text-[#191F28] dark:text-white">
+                                第 {nextUnpaidPeriod.period} 期待繳 (應繳日: {nextUnpaidPeriod.paymentDate})
+                              </div>
+                              <div className="text-[11px] text-[#8B95A1] mt-0.5">
+                                本期本金 NT$ {nextUnpaidPeriod.principalPayment.toLocaleString()} + 利息 NT${' '}
+                                {nextUnpaidPeriod.interestPayment.toLocaleString()}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                recordLoanPayment(
+                                  loan.id,
+                                  nextUnpaidPeriod.period,
+                                  loan.autoDeductAccountId || assetAccounts[0]?.id
+                                );
+                                alert(
+                                  `✅ 繳款成功！本金 NT$ ${nextUnpaidPeriod.principalPayment.toLocaleString()} 扣減負債，利息 NT$ ${nextUnpaidPeriod.interestPayment.toLocaleString()} 計入記帳支出，並已自銀行存款扣繳！`
+                                );
+                              }}
+                              className="px-3.5 py-2 rounded-xl bg-[#2563EB] text-white font-bold text-xs whitespace-nowrap shadow-sm hover:bg-blue-700 transition-colors"
+                            >
+                              繳納本期款項 NT$ {nextUnpaidPeriod.totalPayment.toLocaleString()}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* 展開逐期攤還時程表 */}
+                        <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between text-xs">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLoanExpandedContractId(isExpanded ? null : loan.id)
+                            }
+                            className="text-[#2563EB] font-semibold flex items-center gap-1"
+                          >
+                            <span>{isExpanded ? '收合逐期攤還表' : '展開逐期攤還時程表明細'}</span>
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`確定要刪除「${loan.title}」合約嗎？`)) {
+                                deleteLoan(loan.id);
+                              }
+                            }}
+                            className="text-[#8B95A1] hover:text-[#F04452] p-1"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36] max-h-64 overflow-y-auto space-y-1 text-xs tabular-nums pr-1">
+                            <div className="grid grid-cols-5 text-[11px] font-bold text-[#8B95A1] pb-1 border-b border-[#EAEDF2] dark:border-[#262C36]">
+                              <span>期數</span>
+                              <span>應還本金</span>
+                              <span>應繳利息</span>
+                              <span>剩餘本金</span>
+                              <span className="text-right">狀態</span>
+                            </div>
+                            {loan.schedule.map((item) => (
+                              <div
+                                key={item.period}
+                                className={`grid grid-cols-5 py-1.5 items-center border-b border-[#EAEDF2]/50 dark:border-[#262C36]/50 ${
+                                  item.isPaid ? 'text-[#8B95A1] line-through' : 'font-medium'
+                                }`}
+                              >
+                                <span>第 {item.period} 期</span>
+                                <span>${item.principalPayment.toLocaleString()}</span>
+                                <span className="text-[#F04452]">${item.interestPayment.toLocaleString()}</span>
+                                <span>${item.remainingPrincipal.toLocaleString()}</span>
+                                <span className="text-right">
+                                  {item.isPaid ? (
+                                    <span className="text-emerald-600 font-bold">已繳納 ✓</span>
+                                  ) : (
+                                    <span className="text-[#2563EB] font-bold">待繳</span>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 模式二：房貸/車貸試算機 (Loan Simulator) */}
+          {loanMode === 'simulator' && (
+            <div className="space-y-4">
+              {/* 快速市場預設方案套用 */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-[#4E5968] dark:text-[#9BA4B0]">
+                  快速套用市場主流房貸與車貸規格：
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {LOAN_MARKET_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setLoanSelectedPresetId(p.id);
+                        setLoanTitle(p.title.replace(/^[^\s]+\s*/, ''));
+                        setLoanType(p.loanType);
+                        setLoanPrincipal(String(p.defaultPrincipal));
+                        setLoanMonths(String(p.defaultMonths));
+                        setLoanRatePct(String(p.defaultRatePct));
+                        setLoanRepaymentMethod(p.repaymentMethod);
+                        setLoanGraceMonths(String(p.gracePeriodMonths));
+                      }}
+                      className={`p-3 rounded-xl text-left border transition-all ${
+                        loanSelectedPresetId === p.id
+                          ? 'border-[#2563EB] bg-blue-50/50 dark:bg-blue-950/30'
+                          : 'border-[#EAEDF2] dark:border-[#262C36] bg-[#FFFFFF] dark:bg-[#161B22]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-[#191F28] dark:text-white">
+                          {p.title}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-[#2563EB] font-bold">
+                          {p.badge}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#8B95A1] line-clamp-1">
+                        {p.description}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 試算表單 */}
+              <div className="toss-card p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calculator className="w-5 h-5 text-[#2563EB]" />
+                    <h3 className="text-sm font-bold">貸款自訂參數試算</h3>
+                  </div>
+                  <span className="text-xs text-[#8B95A1]">逐期精算攤還表</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">貸款名稱</label>
+                    <input
+                      type="text"
+                      required
+                      value={loanTitle}
+                      onChange={(e) => setLoanTitle(e.target.value)}
+                      className="toss-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">貸款種類</label>
+                    <select
+                      value={loanType}
+                      onChange={(e) => setLoanType(e.target.value as LoanType)}
+                      className="toss-input"
+                    >
+                      <option value="mortgage">🏠 房屋貸款</option>
+                      <option value="car">🚗 汽車貸款</option>
+                      <option value="personal">🛡️ 個人信用貸款</option>
+                      <option value="revolving">🔄 理財型抵押貸款</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">承辦金融機構</label>
+                    <input
+                      type="text"
+                      value={loanBank}
+                      onChange={(e) => setLoanBank(e.target.value)}
+                      className="toss-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">貸款總金額 (NT$)</label>
+                    <input
+                      type="number"
+                      step="100000"
+                      value={loanPrincipal}
+                      onChange={(e) => setLoanPrincipal(e.target.value)}
+                      className="toss-input tabular-nums font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">總期數 (月)</label>
+                    <input
+                      type="number"
+                      step="12"
+                      value={loanMonths}
+                      onChange={(e) => setLoanMonths(e.target.value)}
+                      className="toss-input tabular-nums font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">基準年利率 (%)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={loanRatePct}
+                      onChange={(e) => setLoanRatePct(e.target.value)}
+                      className="toss-input tabular-nums font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">還款方式</label>
+                    <select
+                      value={loanRepaymentMethod}
+                      onChange={(e) => setLoanRepaymentMethod(e.target.value as RepaymentMethod)}
+                      className="toss-input"
+                    >
+                      <option value="grace_period">寬限期 (前幾年只繳利息)</option>
+                      <option value="equal_payment">本息均攤 (每月固定還款)</option>
+                      <option value="equal_principal">本金均攤 (本金固定利息遞減)</option>
+                      <option value="interest_only">先還利息 (隨借隨還理財型)</option>
+                    </select>
+                  </div>
+                  {loanRepaymentMethod === 'grace_period' && (
+                    <div>
+                      <label className="text-[11px] text-[#8B95A1] block mb-1">寬限期月數</label>
+                      <input
+                        type="number"
+                        step="12"
+                        value={loanGraceMonths}
+                        onChange={(e) => setLoanGraceMonths(e.target.value)}
+                        className="toss-input tabular-nums"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">起貸日期</label>
+                    <input
+                      type="date"
+                      value={loanStartDate}
+                      onChange={(e) => setLoanStartDate(e.target.value)}
+                      className="toss-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">每月扣款日</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={loanPaymentDay}
+                      onChange={(e) => setLoanPaymentDay(e.target.value)}
+                      className="toss-input tabular-nums"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[11px] text-[#8B95A1] block mb-1">
+                      預設扣款銀行存款帳戶 (自動雙軌記帳)
+                    </label>
+                    <select
+                      value={loanAutoPayAccId}
+                      onChange={(e) => setLoanAutoPayAccId(e.target.value)}
+                      className="toss-input"
+                    >
+                      {assetAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} (餘額 NT$ {a.balance.toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 專屬：車貸 0 利率 IRR 試算拆解工具 */}
+                {loanType === 'car' && (
+                  <div className="p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-900 dark:text-amber-200">
+                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                        <span>🚗 車貸 0 利率話術拆解器 (現金折價真實 IRR 計算)</span>
+                      </div>
+                      <span className="text-[10px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-bold">
+                        防坑必算
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-amber-800 dark:text-amber-300 block mb-0.5">
+                          若改用現金買車，業務給的現金折價金額 (NT$)
+                        </label>
+                        <input
+                          type="number"
+                          step="10000"
+                          value={carCashDiscount}
+                          onChange={(e) => setCarCashDiscount(e.target.value)}
+                          className="toss-input bg-white dark:bg-[#161B22] tabular-nums font-bold"
+                        />
+                      </div>
+                      {carIrrResult && (
+                        <div className="p-2 rounded-lg bg-white dark:bg-[#161B22] flex flex-col justify-center tabular-nums">
+                          <div className="text-[10px] text-[#8B95A1]">真實年化利率 (IRR)</div>
+                          <div className="text-base font-bold text-[#F04452]">
+                            實質年息 {carIrrResult.impliedAnnualRatePct}%
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {carIrrResult && (
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                        {carIrrResult.recommendation}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* 轉貸省息試算器折疊開關 */}
+                <div className="pt-2 border-t border-[#EAEDF2] dark:border-[#262C36]">
+                  <button
+                    type="button"
+                    onClick={() => setShowRefinanceTool(!showRefinanceTool)}
+                    className="text-xs text-[#2563EB] font-bold flex items-center gap-1"
+                  >
+                    <span>{showRefinanceTool ? '收合轉貸評估' : '🔄 轉貸省息與手續費損益兩平評估'}</span>
+                    {showRefinanceTool ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+
+                  {showRefinanceTool && (
+                    <div className="mt-2 p-3 rounded-xl bg-[#F6F7F9] dark:bg-[#1F2631] space-y-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 tabular-nums">
+                        <div>
+                          <label className="text-[10px] text-[#8B95A1] block mb-0.5">
+                            轉貸新手續費規費 (例: 代書/塗銷 $25,000)
+                          </label>
+                          <input
+                            type="number"
+                            value={refinanceSwitchingCost}
+                            onChange={(e) => setRefinanceSwitchingCost(e.target.value)}
+                            className="toss-input"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#8B95A1] block mb-0.5">
+                            新銀行提供的優惠年利率 (%)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={refinanceNewRate}
+                            onChange={(e) => setRefinanceNewRate(e.target.value)}
+                            className="toss-input"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-white dark:bg-[#161B22] tabular-nums space-y-1">
+                        <div className="flex justify-between font-bold">
+                          <span>每月可省下利息差額：</span>
+                          <span className="text-[#059669]">
+                            +NT$ {Math.round(refinanceResult.monthlyCashflowDiff).toLocaleString()}/月
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[#8B95A1]">
+                          <span>手續費回本損益兩平期間：</span>
+                          <span className="font-semibold text-[#191F28] dark:text-white">
+                            約 {refinanceResult.breakEvenMonths} 個月
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[#8B95A1]">
+                          <span>總計省息總額：</span>
+                          <span className="font-semibold text-[#2563EB]">
+                            NT$ {refinanceResult.totalInterestSaved.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-bold mt-1 text-[#2563EB]">
+                          {refinanceResult.worthIt
+                            ? '💡 評估結果：利差大於轉貸成本，建議申請轉貸！'
+                            : '⚠️ 評估結果：利差有限，手續費回本期過長，不建議轉貸。'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 試算結果大卡片 */}
+                <div className="p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 space-y-3">
+                  <div className="text-xs font-bold text-[#2563EB]">本方案試算還款總覽</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 tabular-nums text-center text-xs">
+                    <div className="p-2 rounded-lg bg-white dark:bg-[#161B22]">
+                      <div className="text-[10px] text-[#8B95A1]">首期每月還款</div>
+                      <div className="text-base font-bold text-[#191F28] dark:text-white">
+                        ${simulatedLoanResult.monthlyPaymentFirst.toLocaleString()}
+                      </div>
+                    </div>
+                    {loanRepaymentMethod === 'grace_period' && (
+                      <div className="p-2 rounded-lg bg-white dark:bg-[#161B22]">
+                        <div className="text-[10px] text-[#8B95A1]">寬限期後月繳</div>
+                        <div className="text-base font-bold text-[#F04452]">
+                          ${simulatedLoanResult.monthlyPaymentAfterGrace.toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                    <div className="p-2 rounded-lg bg-white dark:bg-[#161B22]">
+                      <div className="text-[10px] text-[#8B95A1]">累計應繳總利息</div>
+                      <div className="text-base font-bold text-[#F04452]">
+                        ${simulatedLoanResult.totalInterest.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-white dark:bg-[#161B22]">
+                      <div className="text-[10px] text-[#8B95A1]">本息總償還額</div>
+                      <div className="text-base font-bold text-[#2563EB]">
+                        ${simulatedLoanResult.totalRepayment.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newContract: LoanContract = {
+                        id: `loan-${Date.now()}`,
+                        title: loanTitle || '個人貸款合約',
+                        loanType,
+                        bankName: loanBank || '指定銀行',
+                        totalPrincipal: Number(loanPrincipal) || 0,
+                        currentRemainingPrincipal: Number(loanPrincipal) || 0,
+                        totalMonths: Number(loanMonths) || 12,
+                        repaymentMethod: loanRepaymentMethod,
+                        gracePeriodMonths: Number(loanGraceMonths) || 0,
+                        annualRatePct: Number(loanRatePct) || 0,
+                        rateType: 'fixed',
+                        startDate: loanStartDate,
+                        monthlyPaymentDay: Number(loanPaymentDay) || 1,
+                        autoDeductAccountId: loanAutoPayAccId || undefined,
+                        schedule: simulatedLoanResult.schedule,
+                        status: 'active',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                      };
+                      upsertLoan(newContract);
+                      setLoanExpandedContractId(newContract.id);
+                      setLoanMode('contracts');
+                      alert(`✅ 已將「${newContract.title}」成功建立為正式貸款合約並列入負債管理！`);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-[#2563EB] text-white text-xs font-bold shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <span>💾 將此試算成果建立為正式貸款合約 (存入我的負債)</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. 固定支出與固定收入 */}
       {subTab === 'recurring' && (
         <div className="space-y-4">
           <div className="toss-card p-4 flex items-center justify-between">

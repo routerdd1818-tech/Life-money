@@ -3,8 +3,10 @@ import {
   CalendarEventItem,
   CreditCard,
   DebtRecord,
+  ExchangeRatesTable,
   Installment,
   InsurancePolicy,
+  LoanContract,
   MedicalRecord,
   NetWorthSnapshot,
   RecurringItem,
@@ -20,6 +22,7 @@ export interface NetWorthSummary {
   totalAssets: number;
   creditCardLiabilityTotal: number;
   debtLiabilityTotal: number;
+  loanLiabilityTotal: number;
   installmentRemainingTotal: number;
   totalLiabilities: number;
   netWorth: number;
@@ -73,6 +76,7 @@ export function getCreditCardUtilization(
 
 /**
  * 計算全資產與負債總覽 (Net Worth Summary)
+ * 支援多幣別帳戶依即時匯率折算為 TWD，並納入房貸車貸未償本金負債
  */
 export function calculateNetWorthSummary(params: {
   accounts: AssetAccount[];
@@ -81,8 +85,17 @@ export function calculateNetWorthSummary(params: {
   cards: CreditCard[];
   installments: Installment[];
   debts: DebtRecord[];
+  loans?: LoanContract[];
+  exchangeRates?: ExchangeRatesTable;
 }): NetWorthSummary {
-  const cashAndBankTotal = params.accounts.reduce((sum, a) => sum + a.balance, 0);
+  const cashAndBankTotal = params.accounts.reduce((sum, a) => {
+    const rate =
+      params.exchangeRates && a.currency && params.exchangeRates[a.currency]
+        ? params.exchangeRates[a.currency]
+        : 1;
+    return sum + a.balance * rate;
+  }, 0);
+
   const investmentTotal = params.holdings.reduce((sum, h) => sum + h.marketValueTwd, 0);
   const insuranceCashValueTotal = params.policies
     .filter((p) => p.isActive && p.includeInNetWorth && (p.estimatedCashValue || 0) > 0)
@@ -105,23 +118,28 @@ export function calculateNetWorthSummary(params: {
     .filter((d) => !d.isSettled && d.type === 'i_owe')
     .reduce((sum, d) => sum + d.remainingAmount, 0);
 
+  const loanLiabilityTotal = (params.loans || [])
+    .filter((l) => l.status === 'active')
+    .reduce((sum, l) => sum + (l.currentRemainingPrincipal || 0), 0);
+
   const totalAssets =
     cashAndBankTotal + investmentTotal + insuranceCashValueTotal + receivablesTotal;
   const totalLiabilities =
-    creditCardLiabilityTotal + debtLiabilityTotal + installmentRemainingTotal;
+    creditCardLiabilityTotal + debtLiabilityTotal + loanLiabilityTotal + installmentRemainingTotal;
   const netWorth = totalAssets - totalLiabilities;
 
   return {
-    cashAndBankTotal,
-    investmentTotal,
-    insuranceCashValueTotal,
-    receivablesTotal,
-    totalAssets,
-    creditCardLiabilityTotal,
-    debtLiabilityTotal,
-    installmentRemainingTotal,
-    totalLiabilities,
-    netWorth,
+    cashAndBankTotal: Math.round(cashAndBankTotal),
+    investmentTotal: Math.round(investmentTotal),
+    insuranceCashValueTotal: Math.round(insuranceCashValueTotal),
+    receivablesTotal: Math.round(receivablesTotal),
+    totalAssets: Math.round(totalAssets),
+    creditCardLiabilityTotal: Math.round(creditCardLiabilityTotal),
+    debtLiabilityTotal: Math.round(debtLiabilityTotal),
+    loanLiabilityTotal: Math.round(loanLiabilityTotal),
+    installmentRemainingTotal: Math.round(installmentRemainingTotal),
+    totalLiabilities: Math.round(totalLiabilities),
+    netWorth: Math.round(netWorth),
   };
 }
 
@@ -219,6 +237,7 @@ export function buildUnifiedCalendarEvents(params: {
   vehicles: VehicleProfile[];
   policies: InsurancePolicy[];
   medicalRecords: MedicalRecord[];
+  loans?: LoanContract[];
 }): CalendarEventItem[] {
   const events: CalendarEventItem[] = [...params.manualEvents];
 
@@ -289,13 +308,13 @@ export function buildUnifiedCalendarEvents(params: {
       });
     }
 
-    // 4. 按月攤還貸款扣款日
+    // 4. 按月攤還借款扣款日
     for (const debt of params.debts) {
       if (debt.isSettled) continue;
       if (debt.monthlyPaymentDay && debt.monthlyPaymentAmount) {
         events.push({
           id: `debt-mo-${debt.id}-${y}-${m}`,
-          title: `${debt.type === 'i_owe' ? '貸款還款' : '應收分期'}：${debt.title}`,
+          title: `${debt.type === 'i_owe' ? '借款還款' : '應收分期'}：${debt.title}`,
           date: formatYearMonthDay(y, m, debt.monthlyPaymentDay),
           source: 'debt',
           sourceRecordId: debt.id,
@@ -304,6 +323,27 @@ export function buildUnifiedCalendarEvents(params: {
           emoji: '🤝',
           notes: `對象：${debt.counterparty} (剩餘 $${debt.remainingAmount.toLocaleString()})`,
         });
+      }
+    }
+
+    // 4b. 正式房貸與車貸每月攤還日
+    if (params.loans) {
+      for (const loan of params.loans) {
+        if (loan.status === 'active' && loan.monthlyPaymentDay) {
+          const nextPeriod = loan.schedule.find((s) => !s.isPaid) || loan.schedule[0];
+          const amt = nextPeriod ? nextPeriod.totalPayment : 0;
+          events.push({
+            id: `loan-mo-${loan.id}-${y}-${m}`,
+            title: `貸款月繳：${loan.title}`,
+            date: formatYearMonthDay(y, m, loan.monthlyPaymentDay),
+            source: 'debt',
+            sourceRecordId: loan.id,
+            amount: amt,
+            colorHex: '#2563EB',
+            emoji: '🏦',
+            notes: `${loan.bankName} (未償本金 $${loan.currentRemainingPrincipal.toLocaleString()})`,
+          });
+        }
       }
     }
   }

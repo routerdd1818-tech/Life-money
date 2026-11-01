@@ -5,15 +5,20 @@ import {
   CashflowShortfallAlert,
   CreditCard,
   DebtRecord,
+  ExchangeRatesTable,
   Installment,
   InsurancePolicy,
+  LoanContract,
   MedicalRecord,
   NetWorthSnapshot,
   PaymentSourceType,
   RecurringItem,
+  SavingsGoal,
   SecurityHolding,
   ScreenerStockItem,
+  SupportedCurrency,
   Transaction,
+  UserProfile,
   VaultSettings,
   VehicleMaintenanceLog,
   VehicleProfile,
@@ -31,8 +36,17 @@ import {
   upsertTodayNetWorthSnapshot,
 } from '../services/financeEngine';
 import { evaluateCashflowShortfalls } from '../services/cashflowAlertEngine';
-import { recalculateHoldingMetrics, syncAllHoldingsQuotes } from '../services/quoteService';
-import { pullVaultFromSupabase, pushVaultToSupabase } from '../services/supabaseService';
+import {
+  DEFAULT_EXCHANGE_RATES,
+  recalculateHoldingMetrics,
+  syncAllHoldingsQuotes,
+} from '../services/quoteService';
+import { calculateLoanSchedule } from '../services/loanEngine';
+import {
+  getSupabaseClient,
+  pullVaultFromSupabase,
+  pushVaultToSupabase,
+} from '../services/supabaseService';
 
 const STORAGE_KEY = 'financelife_vault_v1';
 
@@ -81,8 +95,138 @@ const DEFAULT_ACCOUNTS: AssetAccount[] = [
     name: 'LINE Pay / 一卡通マネー',
     type: 'digital_wallet',
     balance: 4200,
+    currency: 'TWD',
     colorHex: '#10B981',
     emoji: '📱',
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'acc-jpy',
+    name: '玉山 雙幣日圓活存',
+    type: 'bank',
+    balance: 350000,
+    currency: 'JPY',
+    bankCode: '808',
+    accountLastFour: '8831',
+    interestRate: 0.1,
+    colorHex: '#EC4899',
+    emoji: '🇯🇵',
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'acc-usd',
+    name: 'Firstrade 美股現金 (USD)',
+    type: 'brokerage_cash',
+    balance: 3200,
+    currency: 'USD',
+    bankCode: 'FT',
+    accountLastFour: '9120',
+    interestRate: 4.8,
+    colorHex: '#3B82F6',
+    emoji: '🇺🇸',
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+const defaultQingAnCalc = calculateLoanSchedule({
+  totalPrincipal: 10000000,
+  totalMonths: 480,
+  annualRatePct: 1.775,
+  repaymentMethod: 'grace_period',
+  gracePeriodMonths: 60,
+  rateType: 'tiered',
+  tieredRates: [
+    { startMonth: 1, endMonth: 36, annualRatePct: 1.775 },
+    { startMonth: 37, endMonth: 480, annualRatePct: 2.15 },
+  ],
+  startDate: '2024-01-10',
+  monthlyPaymentDay: 10,
+});
+
+const DEFAULT_LOANS: LoanContract[] = [
+  {
+    id: 'loan-qing-an-1',
+    title: '青埔自住 新青安房貸',
+    loanType: 'mortgage',
+    bankName: '臺灣銀行 (青埔分行)',
+    totalPrincipal: 10000000,
+    currentRemainingPrincipal: 10000000,
+    totalMonths: 480,
+    repaymentMethod: 'grace_period',
+    gracePeriodMonths: 60,
+    annualRatePct: 1.775,
+    rateType: 'tiered',
+    tieredRates: [
+      { startMonth: 1, endMonth: 36, annualRatePct: 1.775 },
+      { startMonth: 37, endMonth: 480, annualRatePct: 2.15 },
+    ],
+    startDate: '2024-01-10',
+    monthlyPaymentDay: 10,
+    autoDeductAccountId: 'acc-cathay',
+    schedule: defaultQingAnCalc.schedule.map((s, idx) => {
+      if (idx < 10) {
+        return {
+          ...s,
+          isPaid: true,
+          paidDate: `2024-${String((idx % 12) + 1).padStart(2, '0')}-10`,
+        };
+      }
+      return s;
+    }),
+    notes: '40年期新青安政策房貸，前5年只繳息月付約 $14,792，第6年起開始本息均攤。',
+    status: 'active',
+    createdAt: '2024-01-05T00:00:00.000Z',
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+const DEFAULT_SAVINGS_GOALS: SavingsGoal[] = [
+  {
+    id: 'goal-downpayment',
+    title: '🏡 首購換屋自備頭期款',
+    category: 'house_downpayment',
+    emoji: '🏡',
+    targetAmount: 2500000,
+    currentAmount: 1150000,
+    targetDate: '2027-12-31',
+    linkedAccountId: 'acc-cathay',
+    monthlyPlannedContribution: 35000,
+    colorHex: '#2563EB',
+    notes: '鎖定青埔或竹北高鐵區 2+1 房車，每月發薪定期提撥 $35,000。',
+    isCompleted: false,
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'goal-japan-travel',
+    title: '🍁 東京/京都楓葉季雙人深度遊',
+    category: 'travel',
+    emoji: '🍁',
+    targetAmount: 120000,
+    currentAmount: 92000,
+    targetDate: '2026-11-20',
+    linkedAccountId: 'acc-richart',
+    monthlyPlannedContribution: 10000,
+    colorHex: '#F59E0B',
+    notes: '星野度假村溫泉住宿 + 米其林懷石料理基金。',
+    isCompleted: false,
+    createdAt: '2024-03-01T00:00:00.000Z',
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'goal-emergency-fund',
+    title: '🛡️ 6 個月緊急生活預備金',
+    category: 'emergency_fund',
+    emoji: '🛡️',
+    targetAmount: 360000,
+    currentAmount: 360000,
+    targetDate: '2024-12-31',
+    linkedAccountId: 'acc-cathay',
+    monthlyPlannedContribution: 20000,
+    colorHex: '#10B981',
+    notes: '涵蓋房租、保險與最低生活支出之抗風險防線（已達成！）。',
+    isCompleted: true,
+    createdAt: '2023-01-01T00:00:00.000Z',
     updatedAt: new Date().toISOString(),
   },
 ];
@@ -410,8 +554,12 @@ const DEFAULT_HOLDINGS: SecurityHolding[] = [
 const DEFAULT_VEHICLES: VehicleProfile[] = [
   {
     id: 'veh-rav4',
-    name: 'Toyota RAV4 2.5 Hybrid',
+    name: '家用休旅小紅',
+    vehicleType: 'suv',
+    brand: 'Toyota',
+    modelName: 'RAV4 2.5 Hybrid 旗艦版',
     licensePlate: 'ABC-8899',
+    displacementCc: 2487,
     currentMileage: 49680,
     nextInspectionDate: '2027-03-15',
     insuranceExpiryDate: '2027-01-20',
@@ -622,8 +770,12 @@ const DEFAULT_TRANSACTIONS: Transaction[] = [
 const DEFAULT_SETTINGS: VaultSettings = {
   vaultKey: 'MY-VAULT-2026',
   ownerName: '我的財務與生活金庫',
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl:
+    (import.meta.env.VITE_SUPABASE_URL as string) ||
+    'https://vkrgscbtgrimktqkwqma.supabase.co',
+  supabaseAnonKey:
+    (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZrcmdzY2J0Z3JpbWt0cWt3cW1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1MTg1OTAsImV4cCI6MjEwOTA5NDU5MH0.oUGS-_GkfVljxifze9rW6TcE5Bi2fYqOHrB22J2GHfo',
   theme: 'light',
   autoSyncEnabled: false,
 };
@@ -644,7 +796,11 @@ interface VaultContextValue {
   manualCalendarEvents: CalendarEventItem[];
   screenerStocks: ScreenerStockItem[];
   watchlist: WatchlistStockItem[];
+  currentUser: UserProfile | null;
   exchangeRateUsdTwd: number;
+  exchangeRates: ExchangeRatesTable;
+  loans: LoanContract[];
+  savingsGoals: SavingsGoal[];
   settings: VaultSettings;
   isQuoteSyncing: boolean;
   isCloudSyncing: boolean;
@@ -654,9 +810,24 @@ interface VaultContextValue {
   passiveIncomeSummary: PassiveIncomeSummary;
   shortfallAlerts: CashflowShortfallAlert[];
 
+  // Actions - Auth (帳號密碼登錄)
+  signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<{ ok: boolean; message: string }>;
+  signInWithEmail: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
+  signOut: () => Promise<void>;
+
   // Actions - Screener & Watchlist
   upsertWatchlistItem: (item: WatchlistStockItem) => void;
   deleteWatchlistItem: (id: string) => void;
+
+  // Actions - Loans (房貸/車貸/信貸與逐期攤還雙軌記帳)
+  upsertLoan: (loan: LoanContract) => void;
+  deleteLoan: (id: string) => void;
+  recordLoanPayment: (loanId: string, periodNumber: number, fromAccountId?: string) => void;
+
+  // Actions - Savings Goals (存錢目標與專款累積)
+  upsertSavingsGoal: (goal: SavingsGoal) => void;
+  deleteSavingsGoal: (id: string) => void;
+  depositToSavingsGoal: (goalId: string, amount: number, fromAccountId?: string, note?: string) => void;
 
   // Actions - Ledger & Credit
   addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'>) => string;
@@ -683,6 +854,7 @@ interface VaultContextValue {
 
   // Actions - Life Vault (Vehicle / Insurance / Medical / Calendar)
   upsertVehicle: (v: VehicleProfile) => void;
+  deleteVehicle: (id: string) => void;
   addVehicleMaintenanceLog: (
     vehicleId: string,
     log: Omit<VehicleMaintenanceLog, 'id' | 'vehicleId'>,
@@ -726,15 +898,23 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [manualCalendarEvents, setManualCalendarEvents] = useState<CalendarEventItem[]>([]);
   const [screenerStocks, setScreenerStocks] = useState<ScreenerStockItem[]>(SCREENER_UNIVERSE);
   const [watchlist, setWatchlist] = useState<WatchlistStockItem[]>(DEFAULT_WATCHLIST);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [exchangeRateUsdTwd, setExchangeRateUsdTwd] = useState<number>(32.18);
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRatesTable>(DEFAULT_EXCHANGE_RATES);
+  const [loans, setLoans] = useState<LoanContract[]>(DEFAULT_LOANS);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(DEFAULT_SAVINGS_GOALS);
   const [settings, setSettings] = useState<VaultSettings>(DEFAULT_SETTINGS);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isQuoteSyncing, setIsQuoteSyncing] = useState(false);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
-  // 1. 初始化讀取 LocalStorage
+  // 1. 初始化讀取 LocalStorage 與 Supabase Auth 狀態
   useEffect(() => {
     try {
+      const savedUser = localStorage.getItem('financelife_user_session');
+      if (savedUser) {
+        setCurrentUser(JSON.parse(savedUser));
+      }
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -752,9 +932,19 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (Array.isArray(parsed.manualCalendarEvents))
           setManualCalendarEvents(parsed.manualCalendarEvents);
         if (Array.isArray(parsed.watchlist)) setWatchlist(parsed.watchlist);
+        if (Array.isArray(parsed.loans)) setLoans(parsed.loans);
+        if (Array.isArray(parsed.savingsGoals)) setSavingsGoals(parsed.savingsGoals);
+        if (parsed.exchangeRates) setExchangeRates(parsed.exchangeRates);
         if (typeof parsed.exchangeRateUsdTwd === 'number')
           setExchangeRateUsdTwd(parsed.exchangeRateUsdTwd);
-        if (parsed.settings) setSettings({ ...DEFAULT_SETTINGS, ...parsed.settings });
+        if (parsed.settings) {
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...parsed.settings,
+            supabaseUrl: parsed.settings.supabaseUrl || DEFAULT_SETTINGS.supabaseUrl,
+            supabaseAnonKey: parsed.settings.supabaseAnonKey || DEFAULT_SETTINGS.supabaseAnonKey,
+          });
+        }
       }
     } catch {
       // use defaults
@@ -783,8 +973,10 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         cards: creditCards,
         installments,
         debts: debtRecords,
+        loans,
+        exchangeRates,
       }),
-    [assetAccounts, securityHoldings, insurancePolicies, creditCards, installments, debtRecords]
+    [assetAccounts, securityHoldings, insurancePolicies, creditCards, installments, debtRecords, loans, exchangeRates]
   );
 
   const passiveIncomeSummary = useMemo(
@@ -831,6 +1023,9 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       medicalRecords,
       manualCalendarEvents,
       watchlist,
+      loans,
+      savingsGoals,
+      exchangeRates,
       exchangeRateUsdTwd,
       settings,
     };
@@ -849,6 +1044,9 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     medicalRecords,
     manualCalendarEvents,
     watchlist,
+    loans,
+    savingsGoals,
+    exchangeRates,
     exchangeRateUsdTwd,
     settings,
     netWorthSummary,
@@ -865,12 +1063,11 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (isQuoteSyncing) return;
     setIsQuoteSyncing(true);
     try {
-      const { updatedHoldings, exchangeRateUsdTwd: liveFx } = await syncAllHoldingsQuotes(
-        securityHoldings,
-        exchangeRateUsdTwd
-      );
+      const { updatedHoldings, exchangeRateUsdTwd: liveFx, exchangeRates: liveRates } =
+        await syncAllHoldingsQuotes(securityHoldings, exchangeRateUsdTwd, exchangeRates);
       setSecurityHoldings(updatedHoldings);
       setExchangeRateUsdTwd(liveFx);
+      if (liveRates) setExchangeRates(liveRates);
 
       // 同步把最新報價映射到選股池與關注清單
       const priceMap = new Map<string, { price: number; prevClose?: number }>();
@@ -1159,6 +1356,161 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  // =====================================================
+  // 貸款試算與逐期攤還雙軌記帳 (Loans & Amortization)
+  // =====================================================
+
+  const upsertLoan = (loan: LoanContract) => {
+    setLoans((prev) => {
+      const exists = prev.some((l) => l.id === loan.id);
+      return exists ? prev.map((l) => (l.id === loan.id ? loan : l)) : [loan, ...prev];
+    });
+  };
+
+  const deleteLoan = (id: string) => {
+    setLoans((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  const recordLoanPayment = (loanId: string, periodNumber: number, fromAccountId?: string) => {
+    setLoans((prev) =>
+      prev.map((l) => {
+        if (l.id !== loanId) return l;
+        const periodIdx = l.schedule.findIndex((s) => s.period === periodNumber);
+        if (periodIdx === -1) return l;
+
+        const period = l.schedule[periodIdx];
+        if (period.isPaid) return l;
+
+        const nowStr = new Date().toISOString().slice(0, 10);
+        const updatedSchedule = [...l.schedule];
+        const txId = `tx-loan-${l.id}-${periodNumber}`;
+        updatedSchedule[periodIdx] = {
+          ...period,
+          isPaid: true,
+          paidDate: nowStr,
+          linkedTransactionId: txId,
+        };
+
+        const newRemaining = Math.max(0, l.currentRemainingPrincipal - period.principalPayment);
+        const isAllPaid = updatedSchedule.every((s) => s.isPaid) || newRemaining === 0;
+
+        const targetAccId = fromAccountId || l.autoDeductAccountId;
+        const targetAcc = assetAccounts.find((a) => a.id === targetAccId);
+
+        // 雙軌拆帳：
+        // 1. 利息支出 (損益 Expense)：計入日常記帳生活花費
+        if (period.interestPayment > 0) {
+          const defaultSource = targetAcc || assetAccounts[0];
+          addTransaction({
+            type: 'expense',
+            amount: period.interestPayment,
+            date: nowStr,
+            categoryName: '房貸車貸利息支出',
+            categoryEmoji: '🏦',
+            paymentSourceType: 'account',
+            paymentSourceId: defaultSource ? defaultSource.id : '',
+            paymentSourceName: defaultSource ? defaultSource.name : '銀行自動扣繳',
+            notes: `${l.title} 第 ${periodNumber} 期利息支出 (本期本金 $${period.principalPayment.toLocaleString()})`,
+            linkedModule: 'debt',
+            linkedRecordId: l.id,
+          });
+        }
+
+        // 2. 本金扣抵負債 + 銀行存款扣繳 (若有綁定存款帳戶，扣除整筆本息 totalPayment)
+        if (targetAcc) {
+          setAssetAccounts((accs) =>
+            accs.map((a) =>
+              a.id === targetAcc.id
+                ? {
+                    ...a,
+                    balance: a.balance - period.totalPayment,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : a
+            )
+          );
+        }
+
+        return {
+          ...l,
+          currentRemainingPrincipal: newRemaining,
+          status: isAllPaid ? 'settled' : 'active',
+          schedule: updatedSchedule,
+          updatedAt: new Date().toISOString(),
+        };
+      })
+    );
+  };
+
+  // =====================================================
+  // 存錢目標與專款累積 (Savings Goals)
+  // =====================================================
+
+  const upsertSavingsGoal = (goal: SavingsGoal) => {
+    setSavingsGoals((prev) => {
+      const exists = prev.some((g) => g.id === goal.id);
+      return exists ? prev.map((g) => (g.id === goal.id ? goal : g)) : [goal, ...prev];
+    });
+  };
+
+  const deleteSavingsGoal = (id: string) => {
+    setSavingsGoals((prev) => prev.filter((g) => g.id !== id));
+  };
+
+  const depositToSavingsGoal = (
+    goalId: string,
+    amount: number,
+    fromAccountId?: string,
+    note?: string
+  ) => {
+    if (amount <= 0) return;
+    const nowStr = new Date().toISOString().slice(0, 10);
+
+    setSavingsGoals((prev) =>
+      prev.map((g) => {
+        if (g.id !== goalId) return g;
+        const newAmt = g.currentAmount + amount;
+        return {
+          ...g,
+          currentAmount: newAmt,
+          isCompleted: newAmt >= g.targetAmount,
+          updatedAt: new Date().toISOString(),
+        };
+      })
+    );
+
+    if (fromAccountId) {
+      const targetAcc = assetAccounts.find((a) => a.id === fromAccountId);
+      if (targetAcc) {
+        setAssetAccounts((accs) =>
+          accs.map((a) =>
+            a.id === targetAcc.id
+              ? {
+                  ...a,
+                  balance: a.balance - amount,
+                  updatedAt: new Date().toISOString(),
+                }
+              : a
+          )
+        );
+
+        addTransaction({
+          type: 'expense',
+          amount,
+          date: nowStr,
+          categoryName: '存錢計畫專款',
+          categoryEmoji: '🎯',
+          paymentSourceType: 'account',
+          paymentSourceId: targetAcc.id,
+          paymentSourceName: targetAcc.name,
+          notes: note || '存入夢想存錢目標專款',
+          linkedModule: 'recurring',
+          linkedRecordId: goalId,
+        });
+      }
+    }
+  };
+
   const upsertRecurringItem = (item: RecurringItem) => {
     setRecurringItems((prev) => {
       const exists = prev.some((r) => r.id === item.id);
@@ -1242,6 +1594,10 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const exists = prev.some((item) => item.id === v.id);
       return exists ? prev.map((item) => (item.id === v.id ? v : item)) : [...prev, v];
     });
+  };
+
+  const deleteVehicle = (id: string) => {
+    setVehicles((prev) => prev.filter((v) => v.id !== id));
   };
 
   const addVehicleMaintenanceLog = (
@@ -1422,22 +1778,30 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const syncToCloud = async () => {
     setIsCloudSyncing(true);
     try {
-      const res = await pushVaultToSupabase(settings, {
-        transactions,
-        credit_cards: creditCards,
-        installments,
-        debt_records: debtRecords,
-        recurring_items: recurringItems,
-        asset_accounts: assetAccounts,
-        security_holdings: securityHoldings,
-        net_worth_snapshots: netWorthSnapshots,
-        vehicles,
-        insurance_policies: insurancePolicies,
-        medical_records: medicalRecords,
-        manual_calendar_events: manualCalendarEvents,
-        watchlist,
-        exchange_rate_usd_twd: exchangeRateUsdTwd,
-      });
+      const res = await pushVaultToSupabase(
+        settings,
+        {
+          transactions,
+          credit_cards: creditCards,
+          installments,
+          debt_records: debtRecords,
+          recurring_items: recurringItems,
+          asset_accounts: assetAccounts,
+          security_holdings: securityHoldings,
+          net_worth_snapshots: netWorthSnapshots,
+          vehicles,
+          insurance_policies: insurancePolicies,
+          medical_records: medicalRecords,
+          manual_calendar_events: manualCalendarEvents,
+          watchlist,
+          loans,
+          savings_goals: savingsGoals,
+          exchange_rates: exchangeRates,
+          exchange_rate_usd_twd: exchangeRateUsdTwd,
+        },
+        currentUser?.id,
+        currentUser?.email
+      );
       if (res.ok && res.syncedAt) {
         updateSettings({ lastSyncedAt: res.syncedAt });
       }
@@ -1445,6 +1809,160 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       setIsCloudSyncing(false);
     }
+  };
+
+  // =====================================================
+  // 多使用者帳號密碼登錄 / 註冊 / 登出邏輯
+  // =====================================================
+
+  const signUpWithEmail = async (
+    email: string,
+    pass: string,
+    displayName?: string
+  ): Promise<{ ok: boolean; message: string }> => {
+    const supabase = getSupabaseClient(settings);
+    if (!supabase) {
+      // 離線多帳號模擬模式 (即使未連線 Supabase 也能切換多使用者)
+      const mockUser: UserProfile = {
+        id: `usr-${Date.now()}`,
+        email,
+        username: email.split('@')[0],
+        displayName: displayName || email.split('@')[0],
+        createdAt: new Date().toISOString(),
+      };
+      setCurrentUser(mockUser);
+      localStorage.setItem('financelife_user_session', JSON.stringify(mockUser));
+      updateSettings({ vaultKey: `VAULT-${mockUser.username.toUpperCase()}`, ownerName: mockUser.displayName });
+      return { ok: true, message: `註冊成功！已切換至「${mockUser.displayName}」專屬金庫` };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: pass,
+        options: {
+          data: {
+            display_name: displayName || email.split('@')[0],
+          },
+        },
+      });
+
+      if (error) {
+        return { ok: false, message: error.message };
+      }
+
+      if (data?.user) {
+        const profile: UserProfile = {
+          id: data.user.id,
+          email: data.user.email || email,
+          username: (data.user.email || email).split('@')[0],
+          displayName: displayName || (data.user.email || email).split('@')[0],
+          createdAt: data.user.created_at,
+        };
+        setCurrentUser(profile);
+        localStorage.setItem('financelife_user_session', JSON.stringify(profile));
+        updateSettings({
+          vaultKey: `VAULT-${profile.id.slice(0, 8).toUpperCase()}`,
+          ownerName: profile.displayName,
+        });
+        return { ok: true, message: `註冊並登錄成功！歡迎 ${profile.displayName}` };
+      }
+
+      return { ok: true, message: '請至信箱點擊確認信完成驗證後登錄' };
+    } catch (err) {
+      return { ok: false, message: `註冊異常：${String(err)}` };
+    }
+  };
+
+  const signInWithEmail = async (
+    email: string,
+    pass: string
+  ): Promise<{ ok: boolean; message: string }> => {
+    const supabase = getSupabaseClient(settings);
+    if (!supabase) {
+      // 離線多帳號切換
+      const mockUser: UserProfile = {
+        id: `usr-${email.replace(/[^a-zA-Z0-9]/g, '')}`,
+        email,
+        username: email.split('@')[0],
+        displayName: email.split('@')[0],
+        createdAt: new Date().toISOString(),
+      };
+      setCurrentUser(mockUser);
+      localStorage.setItem('financelife_user_session', JSON.stringify(mockUser));
+      updateSettings({ vaultKey: `VAULT-${mockUser.username.toUpperCase()}`, ownerName: mockUser.displayName });
+      return { ok: true, message: `登入成功！已切換為「${mockUser.displayName}」帳號` };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass,
+      });
+
+      if (error) {
+        return { ok: false, message: error.message };
+      }
+
+      if (data?.user) {
+        const profile: UserProfile = {
+          id: data.user.id,
+          email: data.user.email || email,
+          username: (data.user.email || email).split('@')[0],
+          displayName:
+            data.user.user_metadata?.display_name || (data.user.email || email).split('@')[0],
+          createdAt: data.user.created_at,
+        };
+        setCurrentUser(profile);
+        localStorage.setItem('financelife_user_session', JSON.stringify(profile));
+        const userVaultKey = `VAULT-${profile.id.slice(0, 8).toUpperCase()}`;
+        updateSettings({
+          vaultKey: userVaultKey,
+          ownerName: profile.displayName,
+        });
+
+        // 登入後自動嘗試抓取該帳號在 Supabase 的金庫資料
+        setTimeout(() => {
+          void pullVaultFromSupabase({ ...settings, vaultKey: userVaultKey }).then((res) => {
+            if (res.ok && res.data) {
+              const d = res.data;
+              setTransactions(d.transactions || []);
+              setCreditCards(d.credit_cards || []);
+              setInstallments(d.installments || []);
+              setDebtRecords(d.debt_records || []);
+              setRecurringItems(d.recurring_items || []);
+              setAssetAccounts(d.asset_accounts || []);
+              setSecurityHoldings(d.security_holdings || []);
+              setNetWorthSnapshots(d.net_worth_snapshots || []);
+              setVehicles(d.vehicles || []);
+              setInsurancePolicies(d.insurance_policies || []);
+              setMedicalRecords(d.medical_records || []);
+              setManualCalendarEvents(d.manual_calendar_events || []);
+              if (Array.isArray(d.watchlist)) setWatchlist(d.watchlist);
+              if (Array.isArray(d.loans)) setLoans(d.loans);
+              if (Array.isArray(d.savings_goals)) setSavingsGoals(d.savings_goals);
+              if (d.exchange_rates) setExchangeRates(d.exchange_rates);
+            }
+          });
+        }, 300);
+
+        return { ok: true, message: `登入成功！已同步 ${profile.displayName} 的專屬資料` };
+      }
+
+      return { ok: false, message: '登入失敗，查無使用者' };
+    } catch (err) {
+      return { ok: false, message: `登入異常：${String(err)}` };
+    }
+  };
+
+  const signOut = async () => {
+    const supabase = getSupabaseClient(settings);
+    if (supabase) {
+      await supabase.auth.signOut().catch(() => {});
+    }
+    setCurrentUser(null);
+    localStorage.removeItem('financelife_user_session');
+    updateSettings({ vaultKey: 'DEFAULT-VAULT', ownerName: '訪客金庫' });
   };
 
   const restoreFromCloud = async () => {
@@ -1466,6 +1984,9 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setMedicalRecords(d.medical_records || []);
         setManualCalendarEvents(d.manual_calendar_events || []);
         if (Array.isArray(d.watchlist)) setWatchlist(d.watchlist);
+        if (Array.isArray(d.loans)) setLoans(d.loans);
+        if (Array.isArray(d.savings_goals)) setSavingsGoals(d.savings_goals);
+        if (d.exchange_rates) setExchangeRates(d.exchange_rates);
         if (typeof d.exchange_rate_usd_twd === 'number') {
           setExchangeRateUsdTwd(d.exchange_rate_usd_twd);
         }
@@ -1493,6 +2014,9 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         medicalRecords,
         manualCalendarEvents,
         watchlist,
+        loans,
+        savingsGoals,
+        exchangeRates,
         exchangeRateUsdTwd,
         settings,
       },
@@ -1518,6 +2042,9 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Array.isArray(parsed.manualCalendarEvents))
         setManualCalendarEvents(parsed.manualCalendarEvents);
       if (Array.isArray(parsed.watchlist)) setWatchlist(parsed.watchlist);
+      if (Array.isArray(parsed.loans)) setLoans(parsed.loans);
+      if (Array.isArray(parsed.savingsGoals)) setSavingsGoals(parsed.savingsGoals);
+      if (parsed.exchangeRates) setExchangeRates(parsed.exchangeRates);
       return true;
     } catch {
       return false;
@@ -1541,6 +2068,10 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         manualCalendarEvents,
         screenerStocks,
         watchlist,
+        loans,
+        savingsGoals,
+        exchangeRates,
+        currentUser,
         exchangeRateUsdTwd,
         settings,
         isQuoteSyncing,
@@ -1548,8 +2079,17 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         netWorthSummary,
         passiveIncomeSummary,
         shortfallAlerts,
+        signUpWithEmail,
+        signInWithEmail,
+        signOut,
         upsertWatchlistItem,
         deleteWatchlistItem,
+        upsertLoan,
+        deleteLoan,
+        recordLoanPayment,
+        upsertSavingsGoal,
+        deleteSavingsGoal,
+        depositToSavingsGoal,
         addTransaction,
         deleteTransaction,
         upsertCreditCard,
@@ -1570,6 +2110,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteSecurityHolding,
         refreshQuotes,
         upsertVehicle,
+        deleteVehicle,
         addVehicleMaintenanceLog,
         upsertInsurancePolicy,
         deleteInsurancePolicy,

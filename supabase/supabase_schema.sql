@@ -4,9 +4,11 @@
 --       股票/ETF/基金/債券自動計價、汽車保養、保險保單、醫療回診、整合行事曆
 -- =====================================================================
 
--- 1. 建立個人金庫全狀態同步表 (Local-First 雙向即時同步)
+-- 1. 建立個人金庫全狀態同步表 (支援多使用者帳密/UUID 隔離，相容 vault_key)
 create table if not exists public.user_vault_data (
   vault_key text primary key,
+  user_id uuid references auth.users(id) on delete cascade,
+  email text,
   owner_name text not null default '我的財務與生活管家',
   transactions jsonb not null default '[]'::jsonb,
   credit_cards jsonb not null default '[]'::jsonb,
@@ -21,9 +23,19 @@ create table if not exists public.user_vault_data (
   medical_records jsonb not null default '[]'::jsonb,
   manual_calendar_events jsonb not null default '[]'::jsonb,
   watchlist jsonb not null default '[]'::jsonb,
+  loans jsonb not null default '[]'::jsonb,
+  savings_goals jsonb not null default '[]'::jsonb,
+  exchange_rates jsonb not null default '{}'::jsonb,
   exchange_rate_usd_twd numeric not null default 32.18,
   updated_at timestamptz not null default now()
 );
+
+-- 若先前已存在該表，自動補充 user_id, email, loans, savings_goals, exchange_rates 欄位
+alter table public.user_vault_data add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.user_vault_data add column if not exists email text;
+alter table public.user_vault_data add column if not exists loans jsonb not null default '[]'::jsonb;
+alter table public.user_vault_data add column if not exists savings_goals jsonb not null default '[]'::jsonb;
+alter table public.user_vault_data add column if not exists exchange_rates jsonb not null default '{}'::jsonb;
 
 -- 啟用 RLS 並允許金庫識別碼讀寫
 alter table public.user_vault_data enable row level security;

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   ArrowDownRight,
@@ -35,6 +35,7 @@ import {
   MARKET_RANKING_CATEGORIES,
   MarketRankingType,
   QUANT_STRATEGIES,
+  SectorFlowSummary,
 } from '../services/stockScreenerEngine';
 import {
   ScreenerFilterCriteria,
@@ -60,8 +61,9 @@ import {
 import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
 import { IndustryMapView } from '../components/IndustryMapView';
 
-type MainTab = 'watchlist' | 'rankings' | 'industries' | 'strategies';
+type MainTab = 'watchlist' | 'rankings' | 'rotation' | 'industries' | 'strategies';
 type ModalViewMode = 'kline' | 'ai_fundamental' | 'industry_map';
+type StrategyCategory = 'all' | 'inst' | 'technical' | 'value' | 'bearish';
 
 interface UnifiedSearchItem {
   id: string;
@@ -89,10 +91,23 @@ export const StockScreenerView: React.FC = () => {
     isQuoteSyncing,
   } = useVault();
 
-  // 1. 主頁籤與全域搜尋 (自選關注 / 行情排行 / 全市場族群 / 策略選股)
+  // 1. 主頁籤與全域搜尋 (自選關注 / 行情排行 / 資金輪動 / 全市場族群 / 策略選股)
   const [activeTab, setActiveTab] = useState<MainTab>('watchlist');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isResolvingStock, setIsResolvingStock] = useState<string | null>(null);
+
+  // 1.2 自動同步機制：在進入自選或排行頁籤時，若距離上次刷新超過 45 秒，背景自動無感同步
+  useEffect(() => {
+    if (activeTab === 'watchlist' || activeTab === 'rankings') {
+      const last = settings.lastQuoteRefreshedAt
+        ? new Date(settings.lastQuoteRefreshedAt).getTime()
+        : 0;
+      const now = Date.now();
+      if (now - last > 45000 && !isQuoteSyncing) {
+        void refreshQuotes();
+      }
+    }
+  }, [activeTab]);
 
   // 1.5 行情排行狀態 (漲跌榜 / 買賣超榜 / 成交金額)
   const [activeRankingType, setActiveRankingType] = useState<MarketRankingType>('gainers');
@@ -100,14 +115,44 @@ export const StockScreenerView: React.FC = () => {
     return getMarketRankings(screenerStocks, 20);
   }, [screenerStocks]);
 
+  // 1.8 板塊資金輪動象限與成交熱度統計
+  const sectorSummaries = useMemo(() => {
+    return calculateSectorFlowStats(screenerStocks);
+  }, [screenerStocks]);
+
   // 2. 產業族群與次級小分類狀態
   const [selectedGroupId, setSelectedGroupId] = useState<string>('ind_semicon');
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<string>('all');
   const [groupSearchQuery, setGroupSearchQuery] = useState<string>('');
 
-  // 3. 量化策略狀態
+  // 3. 量化策略狀態 (支援分類篩選與全新卡片佈局)
+  const [strategyCat, setStrategyCat] = useState<StrategyCategory>('all');
   const [activeStrategyId, setActiveStrategyId] = useState<string>('highest_win_rate_alpha');
   const [criteria, setCriteria] = useState<ScreenerFilterCriteria>(QUANT_STRATEGIES[0].criteria);
+
+  // 依風格分類過濾之策略清單
+  const filteredStrategies = useMemo(() => {
+    if (strategyCat === 'all') return QUANT_STRATEGIES;
+    if (strategyCat === 'inst') {
+      return QUANT_STRATEGIES.filter((s) =>
+        ['highest_win_rate_alpha', 'trust_momentum', 'ma_ribbon_surge', 'sector_leader_flow'].includes(s.id)
+      );
+    }
+    if (strategyCat === 'technical') {
+      return QUANT_STRATEGIES.filter((s) =>
+        ['bollinger_squeeze_breakout', 'macd_rsi_divergence', 'bottom_up_all_star'].includes(s.id)
+      );
+    }
+    if (strategyCat === 'value') {
+      return QUANT_STRATEGIES.filter((s) =>
+        ['garp_peg_value', 'peer_relative_valuation', 'low_vol_moat', 'fcf_high_yield'].includes(s.id)
+      );
+    }
+    if (strategyCat === 'bearish') {
+      return QUANT_STRATEGIES.filter((s) => Boolean(s.criteria.isBearishStrategy));
+    }
+    return QUANT_STRATEGIES;
+  }, [strategyCat]);
 
   // 4. 股票詳情底層抽屜狀態 (直覺切換: K線走勢 vs AI深度決策)
   const [detailStock, setDetailStock] = useState<ScreenerStockItem | null>(null);
@@ -472,12 +517,12 @@ export const StockScreenerView: React.FC = () => {
         )}
       </section>
 
-      {/* 2. 主分頁切換 (自選關注 / 行情排行 / 全市場族群 / 策略選股) */}
-      <div className="flex p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-xs font-bold gap-1">
+      {/* 2. 主分頁切換 (自選 / 排行 / 輪動 / 族群 / 策略) - 5 欄均分網格，一眼看清所有核心功能 */}
+      <div className="grid grid-cols-5 p-1 rounded-xl bg-[#F0F2F6] dark:bg-[#1F2631] text-[11px] sm:text-xs font-bold gap-1">
         <button
           type="button"
           onClick={() => setActiveTab('watchlist')}
-          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+          className={`py-1.5 rounded-lg transition-all flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 ${
             activeTab === 'watchlist'
               ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
               : 'text-[#8B95A1] hover:text-[#4E5968]'
@@ -490,7 +535,7 @@ export const StockScreenerView: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('rankings')}
-          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+          className={`py-1.5 rounded-lg transition-all flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 ${
             activeTab === 'rankings'
               ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
               : 'text-[#8B95A1] hover:text-[#4E5968]'
@@ -502,28 +547,41 @@ export const StockScreenerView: React.FC = () => {
 
         <button
           type="button"
+          onClick={() => setActiveTab('rotation')}
+          className={`py-1.5 rounded-lg transition-all flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 ${
+            activeTab === 'rotation'
+              ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
+              : 'text-[#8B95A1] hover:text-[#4E5968]'
+          }`}
+        >
+          <Flame className="w-3.5 h-3.5" />
+          <span>輪動</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('industries')}
-          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+          className={`py-1.5 rounded-lg transition-all flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 ${
             activeTab === 'industries'
               ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
               : 'text-[#8B95A1] hover:text-[#4E5968]'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>族群 (3,578)</span>
+          <span>族群</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('strategies')}
-          className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+          className={`py-1.5 rounded-lg transition-all flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 ${
             activeTab === 'strategies'
               ? 'bg-white dark:bg-[#161B22] text-[#191F28] dark:text-white shadow-xs'
               : 'text-[#8B95A1] hover:text-[#4E5968]'
           }`}
         >
           <Compass className="w-3.5 h-3.5" />
-          <span>策略 ({QUANT_STRATEGIES.length})</span>
+          <span>策略</span>
         </button>
       </div>
 
@@ -777,7 +835,134 @@ export const StockScreenerView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 分頁 3: 全市場產業族群 (涵蓋 3,578 檔，流暢水平標籤 + 直覺清單) */}
+      {/* 分頁 3: 資金輪轉與板塊移動 (8 大板塊熱圖與四象限輪動) */}
+      {/* ========================================================================= */}
+      {activeTab === 'rotation' && (
+        <section className="space-y-3">
+          {/* 頂部四象限動態標題卡 */}
+          <div className="p-3.5 rounded-2xl bg-[#F6F7F9] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-sm text-[#191F28] dark:text-white">
+                <Flame className="w-4 h-4 text-rose-500" />
+                <span>市場資金輪轉象限與板塊熱圖</span>
+              </div>
+              <span className="text-[10px] text-[#8B95A1] font-mono">
+                8 大主力題材板塊
+              </span>
+            </div>
+            <p className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0] leading-relaxed">
+              即時統計全台股各板塊資金成交佔比、60 日動能與三大法人淨買賣超，捕捉主力資金大搬風軌跡。
+            </p>
+          </div>
+
+          {/* 8 大板塊熱力方塊 (Sector Heatmap Tiles) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {sectorSummaries.map((sec) => {
+              const isGain = sec.avgDailyChangePct >= 0;
+              const isStrong = sec.avgDailyChangePct >= 1.5;
+
+              return (
+                <div
+                  key={sec.sectorId}
+                  className={`p-3.5 rounded-2xl border transition-all ${
+                    isStrong
+                      ? 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50'
+                      : isGain
+                        ? 'bg-orange-50/50 dark:bg-orange-950/20 border-orange-200/70 dark:border-orange-900/40'
+                        : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/70 dark:border-emerald-900/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-sm text-[#191F28] dark:text-white">
+                          {sec.name}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white/80 dark:bg-[#161B22] border border-black/5 dark:border-white/10 text-[#4E5968] dark:text-[#9BA4B0]">
+                          {sec.rotationLabel}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-[#8B95A1] mt-0.5 line-clamp-1">
+                        {sec.description}
+                      </div>
+                    </div>
+
+                    <div className="text-right tabular-nums">
+                      <div
+                        className={`text-base font-black ${
+                          isGain ? 'text-[#F04452]' : 'text-[#059669]'
+                        }`}
+                      >
+                        {isGain ? '+' : ''}
+                        {sec.avgDailyChangePct}%
+                      </div>
+                      <div className="text-[10px] text-[#8B95A1]">今日平均</div>
+                    </div>
+                  </div>
+
+                  {/* 核心量化指標數據列 */}
+                  <div className="mt-2.5 pt-2 border-t border-black/5 dark:border-white/5 grid grid-cols-3 gap-1 text-center tabular-nums text-[10px]">
+                    <div>
+                      <div className="text-[#8B95A1]">成交比重</div>
+                      <div className="font-bold text-[#191F28] dark:text-white mt-0.5">
+                        {sec.turnoverSharePct}%
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[#8B95A1]">60日動能</div>
+                      <div
+                        className={`font-bold mt-0.5 ${
+                          sec.avgMomentum60dPct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                        }`}
+                      >
+                        {sec.avgMomentum60dPct >= 0 ? '+' : ''}
+                        {sec.avgMomentum60dPct}%
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[#8B95A1]">法人5日買賣超</div>
+                      <div
+                        className={`font-bold mt-0.5 ${
+                          sec.netInstFlowLots >= 0 ? 'text-[#2563EB]' : 'text-[#059669]'
+                        }`}
+                      >
+                        {sec.netInstFlowLots >= 0 ? '+' : ''}
+                        {sec.netInstFlowLots.toLocaleString()}張
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 板塊內核心標的微型磚 (Mini Tiles) */}
+                  <div className="mt-2.5 pt-2 border-t border-black/5 dark:border-white/5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    <span className="text-[10px] text-[#8B95A1] shrink-0">代表股：</span>
+                    {sec.topStocks.slice(0, 4).map((stk) => (
+                      <button
+                        key={stk.symbol}
+                        type="button"
+                        onClick={() => void handleOpenStock(stk)}
+                        className="px-2 py-1 rounded-lg bg-white/90 dark:bg-[#161B22] border border-black/5 dark:border-white/10 hover:border-[#2563EB] text-[11px] font-bold text-[#191F28] dark:text-white flex items-center gap-1 shrink-0 transition-colors shadow-2xs"
+                      >
+                        <span>{stk.name}</span>
+                        <span
+                          className={`text-[9px] tabular-nums ${
+                            stk.dailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                          }`}
+                        >
+                          {stk.dailyChangePct >= 0 ? '+' : ''}
+                          {stk.dailyChangePct}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 分頁 4: 全市場產業族群 (涵蓋 3,578 檔，流暢水平標籤 + 直覺清單) */}
       {/* ========================================================================= */}
       {activeTab === 'industries' && (
         <section className="space-y-2.5">
@@ -914,13 +1099,42 @@ export const StockScreenerView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 分頁 4: 策略選股 (12 套 GitHub 主流量化策略與自適應入選清單) */}
+      {/* 分頁 5: 策略選股 (12 套量化策略分類導航 + 雙欄現代卡片 + 邏輯展開 + 入選名單) */}
       {/* ========================================================================= */}
       {activeTab === 'strategies' && (
-        <section className="space-y-2.5">
-          {/* 策略膠囊選擇器 (水平滾動或網格，支援 12 大主流策略) */}
+        <section className="space-y-3">
+          {/* 1. 頂部風格分類篩選標籤 */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
-            {QUANT_STRATEGIES.map((strat) => {
+            {(
+              [
+                { id: 'all', label: `全部策略 (${QUANT_STRATEGIES.length})` },
+                { id: 'inst', label: '法人主力 (4)' },
+                { id: 'technical', label: '技術指標 (3)' },
+                { id: 'value', label: '價值成長 (4)' },
+                { id: 'bearish', label: '空方避險 (1)' },
+              ] as const
+            ).map((cat) => {
+              const isCatActive = strategyCat === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setStrategyCat(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all font-semibold ${
+                    isCatActive
+                      ? 'bg-[#191F28] text-white dark:bg-white dark:text-[#191F28] border-transparent shadow-xs'
+                      : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 2. 策略選擇卡片網格 (自適應雙欄，整潔現代) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {filteredStrategies.map((strat) => {
               const isActive = activeStrategyId === strat.id;
               const isBearish = Boolean(strat.criteria.isBearishStrategy);
 
@@ -932,35 +1146,56 @@ export const StockScreenerView: React.FC = () => {
                     setActiveStrategyId(strat.id);
                     setCriteria(strat.criteria);
                   }}
-                  className={`px-3 py-2 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 ${
+                  className={`p-3 rounded-2xl border text-left transition-all relative flex flex-col justify-between gap-2 ${
                     isActive
                       ? isBearish
-                        ? 'bg-emerald-950 text-white dark:bg-emerald-900 border-transparent font-bold shadow-xs'
-                        : 'bg-[#191F28] text-white dark:bg-white dark:text-[#191F28] border-transparent font-bold shadow-xs'
-                      : 'bg-white dark:bg-[#161B22] text-[#4E5968] dark:text-[#9BA4B0] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
+                        ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-600 dark:border-emerald-500 shadow-xs ring-1 ring-emerald-500/30'
+                        : 'bg-blue-50/50 dark:bg-blue-950/20 border-[#2563EB] dark:border-[#2563EB] shadow-xs ring-1 ring-[#2563EB]/30'
+                      : 'bg-white dark:bg-[#161B22] border-[#EAEDF2] dark:border-[#262C36] hover:border-[#2563EB]/40'
                   }`}
                 >
-                  {isBearish ? (
-                    <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
-                  ) : (
-                    <Compass className="w-3.5 h-3.5 text-blue-500" />
-                  )}
-                  <span>{strat.name}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#8B95A1]'
-                    }`}
-                  >
-                    {strat.badge}
-                  </span>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-[#191F28] dark:text-white">
+                        {isBearish ? (
+                          <ShieldAlert className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <Compass className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#2563EB]' : 'text-[#8B95A1]'}`} />
+                        )}
+                        <span className="line-clamp-1">{strat.name}</span>
+                      </div>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                          isBearish
+                            ? 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/80 dark:text-emerald-300'
+                            : isActive
+                              ? 'bg-blue-100 text-[#2563EB] dark:bg-blue-950/80 dark:text-blue-300'
+                              : 'bg-[#F0F2F6] dark:bg-[#1F2631] text-[#8B95A1]'
+                        }`}
+                      >
+                        {strat.badge}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0] line-clamp-2 leading-relaxed">
+                      {strat.summary}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[10px] text-[#8B95A1]">
+                    <span>週期：{strat.rebalanceCycle.split('·')[0].trim()}</span>
+                    {isActive && (
+                      <span className="flex items-center gap-1 font-bold text-[#2563EB] dark:text-blue-400">
+                        <Check className="w-3 h-3" /> 使用中
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })}
           </div>
 
-          {/* 當前策略量化邏輯與開源出處詳細卡 */}
+          {/* 3. 當前選中策略的量化邏輯詳細面板 */}
           {(() => {
             const currentStrat =
               QUANT_STRATEGIES.find((s) => s.id === activeStrategyId) || QUANT_STRATEGIES[0];
@@ -968,7 +1203,7 @@ export const StockScreenerView: React.FC = () => {
 
             return (
               <div
-                className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
+                className={`p-3.5 rounded-2xl border text-xs space-y-2 ${
                   isBearish
                     ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40 text-emerald-950 dark:text-emerald-100'
                     : 'bg-[#F6F7F9] dark:bg-[#161B22] border-[#EAEDF2] dark:border-[#262C36] text-[#191F28] dark:text-[#F2F4F8]'
@@ -981,13 +1216,10 @@ export const StockScreenerView: React.FC = () => {
                     ) : (
                       <Compass className="w-4 h-4 text-[#2563EB]" />
                     )}
-                    <span>{currentStrat.name}</span>
-                    <span className="px-1.5 py-0.2 rounded bg-blue-100 text-[#2563EB] dark:bg-blue-950/60 dark:text-blue-300 text-[10px]">
-                      {currentStrat.badge}
-                    </span>
+                    <span>{currentStrat.name} · 量化邏輯剖析</span>
                   </div>
-                  <span className="text-[10px] text-[#8B95A1] font-medium">
-                    調倉週期：{currentStrat.rebalanceCycle}
+                  <span className="text-[10px] text-[#8B95A1] font-mono">
+                    {currentStrat.rebalanceCycle}
                   </span>
                 </div>
                 <p className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0] leading-relaxed">
@@ -997,8 +1229,12 @@ export const StockScreenerView: React.FC = () => {
             );
           })()}
 
-          {/* 入選標的清單 */}
+          {/* 4. 入選標的清單 */}
           <div className="space-y-1.5">
+            <div className="flex items-center justify-between px-1 text-xs text-[#8B95A1]">
+              <span>入選標的 ({passedStocks.length} 檔)</span>
+              <span>自適應量化契合度排序</span>
+            </div>
             {passedStocks.length === 0 ? (
               <div className="toss-card p-6 text-center text-xs text-[#8B95A1]">
                 目前無標的完全符合此策略條件

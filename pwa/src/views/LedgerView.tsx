@@ -10,6 +10,7 @@ import {
   CreditCard as CreditCardIcon,
   Landmark,
   Plus,
+  Receipt,
   Repeat,
   Sparkles,
   SplitSquareVertical,
@@ -196,31 +197,40 @@ export const LedgerView: React.FC<LedgerViewProps> = ({ onOpenQuickEntry }) => {
 
   return (
     <div className="space-y-4 pb-24">
-      {/* 頂部子分頁切換器 */}
-      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#EBEFE6]/50 dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] overflow-x-auto no-scrollbar">
+      {/* 頂部次級選單：自適應 3 欄 x 2 列網格 (電腦 6 欄)，全功能一目了然 */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 p-1.5 rounded-2xl bg-[#F0F2F6] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36]">
         {(
           [
-            { id: 'transactions', label: '日常收支' },
-            { id: 'cards', label: '信用卡' },
-            { id: 'installments', label: '分期紀錄' },
-            { id: 'debts', label: '借放款' },
-            { id: 'loans', label: '🏦 貸款試算攤還' },
-            { id: 'recurring', label: '固定收支' },
+            { id: 'transactions', label: '日常收支', icon: Receipt },
+            { id: 'cards', label: '信用卡', icon: CreditCardIcon },
+            { id: 'installments', label: '分期紀錄', icon: SplitSquareVertical },
+            { id: 'debts', label: '借放款', icon: Users },
+            { id: 'loans', label: '貸款試算', icon: Landmark },
+            { id: 'recurring', label: '固定收支', icon: Repeat },
           ] as const
-        ).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setSubTab(tab.id)}
-            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 shrink-0 ${
-              subTab === tab.id
-                ? 'bg-white dark:bg-[#21262D] text-[#191F28] dark:text-[#F2F4F8] shadow-sm font-bold'
-                : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        ).map((tab) => {
+          const Icon = tab.icon;
+          const isActive = subTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSubTab(tab.id)}
+              className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl text-center transition-all ${
+                isActive
+                  ? 'bg-white dark:bg-[#21262D] text-[#2563EB] dark:text-blue-400 font-bold shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+                  : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
+              }`}
+            >
+              <Icon
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  isActive ? 'text-[#2563EB] dark:text-blue-400' : 'text-[#8B95A1]'
+                }`}
+              />
+              <span className="text-xs font-semibold whitespace-nowrap">{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 1. 日常收支明細 */}

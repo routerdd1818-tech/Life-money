@@ -433,11 +433,11 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (isQuoteSyncing) return;
     setIsQuoteSyncing(true);
     try {
-      // 收集持倉、關注清單與熱門選股股票代碼一次性向 API 請求
+      // 收集持倉、關注清單與全選股池股票代碼一次性向 API 請求，保證自選與排行全面自動更新
       const extraSyms = Array.from(
         new Set([
           ...watchlist.map((w) => w.symbol),
-          ...screenerStocks.slice(0, 15).map((s) => s.symbol),
+          ...screenerStocks.map((s) => s.symbol),
         ])
       );
 
@@ -453,17 +453,27 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         lastQuoteRefreshedAt: refreshedAt,
       }));
 
-      // 同步把最新報價映射到選股池與關注清單
+      // 同步把最新報價映射到選股池與關注清單 (支援純數字代碼與 .TW 雙向索引)
       const priceMap = new Map<string, { price: number; prevClose?: number }>();
       for (const h of updatedHoldings) {
+        const clean = h.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
         priceMap.set(h.symbol.toUpperCase(), {
+          price: h.currentPrice,
+          prevClose: h.previousClose,
+        });
+        priceMap.set(clean, {
           price: h.currentPrice,
           prevClose: h.previousClose,
         });
       }
       for (const [sym, q] of Object.entries(apiQuotes)) {
-        if (!priceMap.has(sym.toUpperCase()) && q.price > 0) {
+        if (q.price > 0) {
+          const clean = sym.replace(/\.(TW|TWO)$/i, '').toUpperCase();
           priceMap.set(sym.toUpperCase(), {
+            price: q.price,
+            prevClose: q.previousClose,
+          });
+          priceMap.set(clean, {
             price: q.price,
             prevClose: q.previousClose,
           });
@@ -473,7 +483,8 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (priceMap.size > 0) {
         setScreenerStocks((prev) =>
           prev.map((s) => {
-            const hit = priceMap.get(s.symbol.toUpperCase());
+            const clean = s.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
+            const hit = priceMap.get(s.symbol.toUpperCase()) || priceMap.get(clean);
             if (!hit) return s;
             const dailyChangePct =
               hit.prevClose && hit.prevClose > 0
@@ -484,7 +495,8 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         );
         setWatchlist((prev) =>
           prev.map((w) => {
-            const hit = priceMap.get(w.symbol.toUpperCase());
+            const clean = w.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
+            const hit = priceMap.get(w.symbol.toUpperCase()) || priceMap.get(clean);
             return hit ? { ...w, currentPrice: hit.price } : w;
           })
         );

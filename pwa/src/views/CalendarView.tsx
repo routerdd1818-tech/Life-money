@@ -1,8 +1,32 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import {
+  Car,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  HeartPulse,
+  Layers,
+  Pin,
+  Plus,
+  Repeat,
+  Shield,
+  SplitSquareVertical,
+  Trash2,
+} from 'lucide-react';
 import { useVault } from '../context/VaultContext';
 import { buildUnifiedCalendarEvents } from '../services/financeEngine';
 import { CalendarEventSource } from '../types';
+
+const CALENDAR_FILTERS = [
+  { id: 'all', label: '全部日程', icon: Layers },
+  { id: 'credit_card', label: '信用卡', icon: CreditCard },
+  { id: 'medical', label: '醫療回診', icon: HeartPulse },
+  { id: 'vehicle', label: '車輛保養', icon: Car },
+  { id: 'insurance', label: '保單扣款', icon: Shield },
+  { id: 'installment', label: '分期付款', icon: SplitSquareVertical },
+  { id: 'recurring', label: '固定收支', icon: Repeat },
+  { id: 'manual', label: '自訂行程', icon: Pin },
+] as const;
 
 export const CalendarView: React.FC = () => {
   const {
@@ -105,33 +129,31 @@ export const CalendarView: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-24">
-      {/* 1. 類別篩選膠囊列 */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-        {(
-          [
-            { id: 'all', label: '全部日程' },
-            { id: 'credit_card', label: '💳 信用卡結帳/繳款' },
-            { id: 'medical', label: '🏥 醫院回診/慢箋' },
-            { id: 'vehicle', label: '🚗 汽車保養/驗車' },
-            { id: 'insurance', label: '🛡️ 保單扣款' },
-            { id: 'installment', label: '📆 分期付款' },
-            { id: 'recurring', label: '🔁 固定收支' },
-            { id: 'manual', label: '📌 自訂行程' },
-          ] as const
-        ).map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setSourceFilter(f.id)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors ${
-              sourceFilter === f.id
-                ? 'bg-[#2563EB] text-white'
-                : 'bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] text-[#4E5968] dark:text-[#9BA4B0]'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      {/* 1. 類別篩選：自適應 4 欄 x 2 列網格 (電腦 8 欄)，杜絕隱藏滑動 */}
+      <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 p-1.5 rounded-2xl bg-[#F0F2F6] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36]">
+        {CALENDAR_FILTERS.map((f) => {
+          const Icon = f.icon;
+          const isActive = sourceFilter === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setSourceFilter(f.id)}
+              className={`flex flex-col sm:flex-row items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-center transition-all ${
+                isActive
+                  ? 'bg-white dark:bg-[#21262D] text-[#2563EB] dark:text-blue-400 font-bold shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+                  : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
+              }`}
+            >
+              <Icon
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  isActive ? 'text-[#2563EB] dark:text-blue-400' : 'text-[#8B95A1]'
+                }`}
+              />
+              <span className="text-[11px] font-semibold whitespace-nowrap">{f.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 2. 月曆主卡片 */}

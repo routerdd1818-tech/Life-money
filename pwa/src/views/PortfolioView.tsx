@@ -58,14 +58,14 @@ type PortfolioSubTab =
   | 'networth';
 
 const PORTFOLIO_TABS = [
-  { id: 'holdings', label: '股票/債券/基金' },
-  { id: 'etf', label: 'ETF 專區' },
-  { id: 'returns', label: '報酬率分析' },
-  { id: 'accounts', label: '多幣別帳戶' },
-  { id: 'rates', label: '常用匯率' },
-  { id: 'savings', label: '存錢計畫' },
-  { id: 'dividends', label: '股息月曆' },
-  { id: 'networth', label: '淨值結構' },
+  { id: 'holdings', label: '證券投資', icon: TrendingUp },
+  { id: 'etf', label: 'ETF 專區', icon: Layers },
+  { id: 'returns', label: '報酬分析', icon: BarChart3 },
+  { id: 'accounts', label: '帳戶資產', icon: Building2 },
+  { id: 'rates', label: '即時匯率', icon: Globe2 },
+  { id: 'savings', label: '存錢計畫', icon: PiggyBank },
+  { id: 'dividends', label: '股息月曆', icon: CalendarDays },
+  { id: 'networth', label: '淨值結構', icon: Coins },
 ] as const;
 
 export const PortfolioView: React.FC = () => {
@@ -219,22 +219,31 @@ export const PortfolioView: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-24">
-      {/* 頂部橫向滾動子分頁切換 */}
-      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#EBEFE6]/50 dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] overflow-x-auto no-scrollbar">
-        {PORTFOLIO_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setSubTab(tab.id)}
-            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 shrink-0 ${
-              subTab === tab.id
-                ? 'bg-white dark:bg-[#21262D] text-[#191F28] dark:text-[#F2F4F8] shadow-sm font-bold'
-                : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* 頂部次級選單：自適應 4 欄 x 2 列網格 (電腦 8 欄)，杜絕隱藏滑動 */}
+      <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 p-1.5 rounded-2xl bg-[#F0F2F6] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36]">
+        {PORTFOLIO_TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = subTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSubTab(tab.id)}
+              className={`flex flex-col sm:flex-row items-center justify-center gap-1 py-2 px-1 rounded-xl text-center transition-all ${
+                isActive
+                  ? 'bg-white dark:bg-[#21262D] text-[#2563EB] dark:text-blue-400 font-bold shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+                  : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
+              }`}
+            >
+              <Icon
+                className={`w-4 h-4 shrink-0 ${
+                  isActive ? 'text-[#2563EB] dark:text-blue-400' : 'text-[#8B95A1]'
+                }`}
+              />
+              <span className="text-[11px] whitespace-nowrap">{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ============================================================== */}

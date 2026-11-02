@@ -241,33 +241,54 @@ export const LifeVaultView: React.FC = () => {
   return (
     <div className="space-y-4 pb-24">
       {/* 頂部子分頁切換器 */}
-      <div className="toss-pill-bar">
+      <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-[#F0F2F6] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36]">
         <button
           type="button"
           onClick={() => setSubTab('vehicle')}
-          className={`toss-pill-btn flex-1 ${
-            subTab === 'vehicle' ? 'toss-pill-btn-active' : 'toss-pill-btn-inactive'
+          className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl text-xs font-bold transition-all ${
+            subTab === 'vehicle'
+              ? 'bg-white dark:bg-[#21262D] text-[#2563EB] dark:text-blue-400 shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+              : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
           }`}
         >
-          🚗 汽車保養資訊
+          <Car
+            className={`w-4 h-4 shrink-0 ${
+              subTab === 'vehicle' ? 'text-[#2563EB] dark:text-blue-400' : 'text-[#8B95A1]'
+            }`}
+          />
+          <span>車輛保養</span>
         </button>
         <button
           type="button"
           onClick={() => setSubTab('insurance')}
-          className={`toss-pill-btn flex-1 ${
-            subTab === 'insurance' ? 'toss-pill-btn-active' : 'toss-pill-btn-inactive'
+          className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl text-xs font-bold transition-all ${
+            subTab === 'insurance'
+              ? 'bg-white dark:bg-[#21262D] text-[#2563EB] dark:text-blue-400 shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+              : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
           }`}
         >
-          🛡️ 保險保單紀錄
+          <ShieldCheck
+            className={`w-4 h-4 shrink-0 ${
+              subTab === 'insurance' ? 'text-[#2563EB] dark:text-blue-400' : 'text-[#8B95A1]'
+            }`}
+          />
+          <span>保單管理</span>
         </button>
         <button
           type="button"
           onClick={() => setSubTab('medical')}
-          className={`toss-pill-btn flex-1 ${
-            subTab === 'medical' ? 'toss-pill-btn-active' : 'toss-pill-btn-inactive'
+          className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl text-xs font-bold transition-all ${
+            subTab === 'medical'
+              ? 'bg-white dark:bg-[#21262D] text-[#2563EB] dark:text-blue-400 shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+              : 'text-[#6B7684] dark:text-[#8B949E] hover:text-[#191F28] dark:hover:text-white'
           }`}
         >
-          🏥 醫療回診與慢箋
+          <HeartPulse
+            className={`w-4 h-4 shrink-0 ${
+              subTab === 'medical' ? 'text-[#2563EB] dark:text-blue-400' : 'text-[#8B95A1]'
+            }`}
+          />
+          <span>醫療回診</span>
         </button>
       </div>
 

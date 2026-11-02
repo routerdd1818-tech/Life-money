@@ -93,6 +93,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             close: r.close,
             volume: Math.round(r.Trading_Volume / 1000), // 張數
           }));
+
+          // 若具備即時盤中報價，更新或追加今日最新 K 棒
+          if (currentPrice && currentPrice > 0) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const last = points[points.length - 1];
+            if (last && last.date === todayStr) {
+              last.close = currentPrice;
+              last.high = Math.max(last.high, currentPrice);
+              last.low = Math.min(last.low, currentPrice);
+            } else if (last) {
+              // 今日盤中尚未寫入日 K，追加今日即時 K 棒
+              points.push({
+                date: todayStr,
+                open: last.close,
+                high: Math.max(last.close, currentPrice),
+                low: Math.min(last.close, currentPrice),
+                close: currentPrice,
+                volume: Math.round(last.volume * 0.8),
+              });
+            }
+          }
+
           setCandleData(points);
           setScrollOffset(0);
         } else if (isMounted) {

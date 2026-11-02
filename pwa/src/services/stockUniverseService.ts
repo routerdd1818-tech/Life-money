@@ -6,6 +6,7 @@
 import rawUniverse from '../data/taiwanStockUniverse.json';
 import { ScreenerStockItem, StockSectorId } from '../types';
 import { aggregateFinMindStockOverview, DEFAULT_FINMIND_TOKEN } from './finMindService';
+import { fetchRealtimeQuote } from './quoteService';
 
 export interface TaiwanStockBasicInfo {
   id: string; // 例: '4526'
@@ -140,13 +141,34 @@ export async function resolveStockToScreenerItem(
   token?: string
 ): Promise<ScreenerStockItem> {
   const effectiveToken = token || DEFAULT_FINMIND_TOKEN;
-  const overview = await aggregateFinMindStockOverview(basic.symbol, effectiveToken);
+  // 雙軌發送：同步拉取即時盤中報價 (TWSE/TPEx) 與 FinMind 歷史量化面
+  const [overview, liveQuote] = await Promise.all([
+    aggregateFinMindStockOverview(basic.symbol, effectiveToken),
+    fetchRealtimeQuote(basic.id),
+  ]);
 
-  const price = overview && overview.latestPrice > 0 ? overview.latestPrice : 30.0;
-  const dailyChangePct = overview ? overview.dailyChangePct : 0;
-  const volumeLots = overview && overview.volumeLots > 0 ? overview.volumeLots : 1200;
+  const price =
+    liveQuote && liveQuote.price > 0
+      ? liveQuote.price
+      : overview && overview.latestPrice > 0
+        ? overview.latestPrice
+        : 30.0;
+
+  const dailyChangePct =
+    liveQuote && typeof liveQuote.dailyChangePct === 'number'
+      ? liveQuote.dailyChangePct
+      : overview
+        ? overview.dailyChangePct
+        : 0;
+
+  const volumeLots =
+    liveQuote && liveQuote.volumeLots && liveQuote.volumeLots > 0
+      ? liveQuote.volumeLots
+      : overview && overview.volumeLots > 0
+        ? overview.volumeLots
+        : 1200;
+
   const turnoverYi = Math.round(((price * volumeLots * 1000) / 100000000) * 10) / 10;
-
   const sectorId = mapIndustryToSectorId(basic.sector);
   const inst5d = overview ? overview.totalInstNetBuyLots5d : 0;
   const trust5d = overview ? overview.trustNetBuyLots5d : 0;
@@ -181,7 +203,7 @@ export async function resolveStockToScreenerItem(
     marginUtilizationHealth: 'healthy',
     revenueYoYPct: revYoY,
     revenueMoMPct: 2.1,
-    catalystNote: `FinMind 官方串接標的，近5日法人買賣超 ${inst5d >= 0 ? '+' : ''}${inst5d} 張`,
+    catalystNote: `TWSE/TPEx 即時報價連動 · 近5日法人買賣超 ${inst5d >= 0 ? '+' : ''}${inst5d} 張`,
     opmPct: 10.5,
     estimatedEps: Math.round((price / 16.5) * 100) / 100,
     atr14: Math.max(0.5, Math.round(price * 0.03 * 10) / 10),

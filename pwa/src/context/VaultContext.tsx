@@ -453,30 +453,31 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         lastQuoteRefreshedAt: refreshedAt,
       }));
 
-      // 同步把最新報價映射到選股池與關注清單 (支援純數字代碼與 .TW 雙向索引)
-      const priceMap = new Map<string, { price: number; prevClose?: number }>();
+      // 同步把最新報價映射到選股池與關注清單 (支援純數字代碼與 .TW / .TWO 雙向索引)
+      const priceMap = new Map<string, { price: number; prevClose?: number; dailyChangePct?: number }>();
       for (const h of updatedHoldings) {
         const clean = h.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
-        priceMap.set(h.symbol.toUpperCase(), {
+        const info = {
           price: h.currentPrice,
           prevClose: h.previousClose,
-        });
-        priceMap.set(clean, {
-          price: h.currentPrice,
-          prevClose: h.previousClose,
-        });
+          dailyChangePct:
+            h.previousClose && h.previousClose > 0
+              ? Math.round(((h.currentPrice - h.previousClose) / h.previousClose) * 10000) / 100
+              : undefined,
+        };
+        priceMap.set(h.symbol.toUpperCase(), info);
+        priceMap.set(clean, info);
       }
       for (const [sym, q] of Object.entries(apiQuotes)) {
         if (q.price > 0) {
           const clean = sym.replace(/\.(TW|TWO)$/i, '').toUpperCase();
-          priceMap.set(sym.toUpperCase(), {
+          const info = {
             price: q.price,
             prevClose: q.previousClose,
-          });
-          priceMap.set(clean, {
-            price: q.price,
-            prevClose: q.previousClose,
-          });
+            dailyChangePct: q.dailyChangePct,
+          };
+          priceMap.set(sym.toUpperCase(), info);
+          priceMap.set(clean, info);
         }
       }
 
@@ -487,10 +488,17 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const hit = priceMap.get(s.symbol.toUpperCase()) || priceMap.get(clean);
             if (!hit) return s;
             const dailyChangePct =
-              hit.prevClose && hit.prevClose > 0
-                ? Math.round(((hit.price - hit.prevClose) / hit.prevClose) * 10000) / 100
-                : s.dailyChangePct;
-            return { ...s, price: hit.price, dailyChangePct };
+              typeof hit.dailyChangePct === 'number'
+                ? hit.dailyChangePct
+                : hit.prevClose && hit.prevClose > 0
+                  ? Math.round(((hit.price - hit.prevClose) / hit.prevClose) * 10000) / 100
+                  : s.dailyChangePct;
+            return {
+              ...s,
+              price: hit.price,
+              dailyChangePct,
+              atr14: Math.max(0.5, Math.round(hit.price * 0.03 * 10) / 10),
+            };
           })
         );
         setWatchlist((prev) =>

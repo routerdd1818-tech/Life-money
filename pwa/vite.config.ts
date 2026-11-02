@@ -53,10 +53,141 @@ function freeQuoteApiDevPlugin(): Plugin {
             // keep default
           }
 
-          // 2. 查詢各標的 Yahoo Finance v8 報價 (自動嘗試 .TW 與 .TWO)
+          // 2. 分流台股代碼與其他海外/指數代碼
+          const twCodesToFetch = new Set<string>();
+          const foreignSymbols: string[] = [];
+          for (const rawSym of requestedSymbols) {
+            const clean = rawSym.toUpperCase().replace(/\.(TW|TWO)$/i, '');
+            if (/^\d{4,6}[A-Z]?$/.test(clean)) {
+              twCodesToFetch.add(clean);
+            } else {
+              foreignSymbols.push(rawSym);
+            }
+          }
+
+          // 3. 查詢 TWSE MIS 官方盤中即時報價
           const quotes: Record<string, unknown> = {};
+          const twCodesArray = Array.from(twCodesToFetch);
+          if (twCodesArray.length > 0) {
+            const chunkSize = 30;
+            const chunks: string[][] = [];
+            for (let i = 0; i < twCodesArray.length; i += chunkSize) {
+              chunks.push(twCodesArray.slice(i, i + chunkSize));
+            }
+
+            await Promise.all(
+              chunks.map(async (chunk) => {
+                const exChParam = chunk.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]).join('|');
+                const misUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exChParam)}&json=1&delay=0`;
+                try {
+                  const misRes = await fetch(misUrl, {
+                    headers: {
+                      'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    },
+                  });
+                  if (!misRes.ok) return;
+                  const misData = (await misRes.json()) as {
+                    msgArray?: Array<{
+                      c?: string;
+                      n?: string;
+                      nf?: string;
+                      z?: string;
+                      y?: string;
+                      o?: string;
+                      h?: string;
+                      l?: string;
+                      v?: string;
+                      t?: string;
+                      d?: string;
+                      b?: string;
+                      a?: string;
+                      ex?: string;
+                      trade?: { z?: string };
+                    }>;
+                  };
+                  if (!misData?.msgArray) return;
+
+                  for (const item of misData.msgArray) {
+                    const code = item.c?.trim().toUpperCase();
+                    if (!code) continue;
+
+                    let price: number | null = null;
+                    if (item.z && item.z !== '-') {
+                      const parsed = parseFloat(item.z);
+                      if (!isNaN(parsed) && parsed > 0) price = parsed;
+                    }
+                    if (price === null && item.trade?.z && item.trade.z !== '-') {
+                      const parsed = parseFloat(item.trade.z);
+                      if (!isNaN(parsed) && parsed > 0) price = parsed;
+                    }
+                    if (price === null) {
+                      const bestBid = item.b ? parseFloat(item.b.split('_')[0]) : NaN;
+                      const bestAsk = item.a ? parseFloat(item.a.split('_')[0]) : NaN;
+                      if (!isNaN(bestBid) && !isNaN(bestAsk) && bestBid > 0 && bestAsk > 0) {
+                        price = Math.round(((bestBid + bestAsk) / 2) * 100) / 100;
+                      } else if (!isNaN(bestBid) && bestBid > 0) price = bestBid;
+                      else if (!isNaN(bestAsk) && bestAsk > 0) price = bestAsk;
+                    }
+                    if (price === null && item.o && item.o !== '-') {
+                      const parsed = parseFloat(item.o);
+                      if (!isNaN(parsed) && parsed > 0) price = parsed;
+                    }
+                    if (price === null && item.y && item.y !== '-') {
+                      const parsed = parseFloat(item.y);
+                      if (!isNaN(parsed) && parsed > 0) price = parsed;
+                    }
+                    if (price === null || price <= 0) continue;
+
+                    const prevClose = item.y && item.y !== '-' ? parseFloat(item.y) : undefined;
+                    const dailyChangePct =
+                      prevClose && prevClose > 0
+                        ? Math.round(((price - prevClose) / prevClose) * 10000) / 100
+                        : undefined;
+                    const isOtc = item.ex?.toLowerCase() === 'otc';
+                    const resolvedSymbol = `${code}.${isOtc ? 'TWO' : 'TW'}`;
+
+                    let updatedAt = new Date().toISOString();
+                    if (item.d && item.t) {
+                      updatedAt = `${item.d.slice(0, 4)}-${item.d.slice(4, 6)}-${item.d.slice(6, 8)}T${item.t}.000+08:00`;
+                    }
+
+                    const entry = {
+                      symbol: code,
+                      resolvedSymbol,
+                      name: item.n || item.nf || code,
+                      price: Math.round(price * 100) / 100,
+                      previousClose: prevClose !== undefined ? Math.round(prevClose * 100) / 100 : undefined,
+                      dailyChangePct,
+                      open: item.o && item.o !== '-' ? parseFloat(item.o) : undefined,
+                      high: item.h && item.h !== '-' ? parseFloat(item.h) : undefined,
+                      low: item.l && item.l !== '-' ? parseFloat(item.l) : undefined,
+                      volumeLots: item.v && item.v !== '-' ? parseInt(item.v, 10) : undefined,
+                      currency: 'TWD',
+                      source: isOtc ? 'tpex' : 'twse',
+                      updatedAt,
+                    };
+
+                    quotes[code] = entry;
+                    quotes[`${code}.TW`] = { ...entry, symbol: `${code}.TW` };
+                    quotes[`${code}.TWO`] = { ...entry, symbol: `${code}.TWO` };
+                  }
+                } catch {
+                  // fallback
+                }
+              })
+            );
+          }
+
+          // 4. 未被 TWSE MIS 命中的標的 (美股、全球 ETF、或台股備援)，由 Yahoo Finance 查詢
+          const unresolvedSymbols = requestedSymbols.filter((sym) => {
+            const upper = sym.toUpperCase();
+            const clean = upper.replace(/\.(TW|TWO)$/i, '');
+            return !quotes[upper] && !quotes[clean];
+          });
+
           await Promise.all(
-            requestedSymbols.map(async (rawSym) => {
+            unresolvedSymbols.map(async (rawSym) => {
               const clean = rawSym.toUpperCase();
               const base = clean.replace(/\.(TW|TWO)$/, '');
               const candidates =
@@ -69,9 +200,9 @@ function freeQuoteApiDevPlugin(): Plugin {
               for (const candidate of candidates) {
                 try {
                   const yRes = await fetch(
-                    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(candidate)}?interval=1d&range=5d`,
+                    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(candidate)}?interval=1m&range=1d`,
                     {
-                      headers: { 'User-Agent': 'Mozilla/5.0 (FinanceLifePWA)' },
+                      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
                     }
                   );
                   if (!yRes.ok) continue;
@@ -82,28 +213,51 @@ function freeQuoteApiDevPlugin(): Plugin {
                           regularMarketPrice?: number;
                           chartPreviousClose?: number;
                           previousClose?: number;
+                          regularMarketDayHigh?: number;
+                          regularMarketDayLow?: number;
+                          regularMarketVolume?: number;
                           currency?: string;
                           shortName?: string;
+                          longName?: string;
                           symbol?: string;
+                          regularMarketTime?: number;
                         };
                       }>;
                     };
                   };
                   const meta = yData?.chart?.result?.[0]?.meta;
                   if (meta && typeof meta.regularMarketPrice === 'number' && meta.regularMarketPrice > 0) {
-                    quotes[clean] = {
+                    const price = Math.round(meta.regularMarketPrice * 100) / 100;
+                    const prevClose =
+                      typeof meta.chartPreviousClose === 'number' && meta.chartPreviousClose > 0
+                        ? Math.round(meta.chartPreviousClose * 100) / 100
+                        : typeof meta.previousClose === 'number' && meta.previousClose > 0
+                          ? Math.round(meta.previousClose * 100) / 100
+                          : undefined;
+
+                    let dailyChangePct: number | undefined;
+                    if (prevClose && prevClose > 0) {
+                      dailyChangePct = Math.round(((price - prevClose) / prevClose) * 10000) / 100;
+                    }
+
+                    const entry = {
                       symbol: clean,
                       resolvedSymbol: meta.symbol || candidate,
-                      name: meta.shortName || clean,
-                      price: Math.round(meta.regularMarketPrice * 100) / 100,
-                      previousClose:
-                        typeof meta.chartPreviousClose === 'number'
-                          ? Math.round(meta.chartPreviousClose * 100) / 100
-                          : meta.previousClose,
+                      name: meta.shortName || meta.longName || clean,
+                      price,
+                      previousClose: prevClose,
+                      dailyChangePct,
+                      high: meta.regularMarketDayHigh ? Math.round(meta.regularMarketDayHigh * 100) / 100 : undefined,
+                      low: meta.regularMarketDayLow ? Math.round(meta.regularMarketDayLow * 100) / 100 : undefined,
+                      volumeLots: meta.regularMarketVolume ? Math.round(meta.regularMarketVolume / 1000) : undefined,
                       currency: meta.currency?.toUpperCase() === 'USD' ? 'USD' : 'TWD',
                       source: 'yahoo',
-                      updatedAt: new Date().toISOString(),
+                      updatedAt: meta.regularMarketTime
+                        ? new Date(meta.regularMarketTime * 1000).toISOString()
+                        : new Date().toISOString(),
                     };
+                    quotes[clean] = entry;
+                    quotes[base] = entry;
                     break;
                   }
                 } catch {
@@ -114,6 +268,7 @@ function freeQuoteApiDevPlugin(): Plugin {
           );
 
           res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
           res.end(
             JSON.stringify({
               exchangeRateUsdTwd: exchangeRates.USD,

@@ -247,23 +247,89 @@ export const SECURITY_PRESETS: SecurityPreset[] = [
   },
 ];
 
-interface ApiQuotesResponse {
+export interface LiveQuoteItem {
+  symbol: string;
+  resolvedSymbol: string;
+  name?: string;
+  price: number;
+  previousClose?: number;
+  dailyChangePct?: number;
+  open?: number;
+  high?: number;
+  low?: number;
+  volumeLots?: number;
+  currency: 'TWD' | 'USD';
+  source: 'twse' | 'tpex' | 'yahoo' | 'fallback' | 'manual';
+  updatedAt: string;
+}
+
+export interface ApiQuotesResponse {
   exchangeRateUsdTwd: number;
   exchangeRates?: ExchangeRatesTable;
-  quotes: Record<
-    string,
-    {
-      symbol: string;
-      resolvedSymbol: string;
-      name?: string;
-      price: number;
-      previousClose?: number;
-      currency: 'TWD' | 'USD';
-      source: 'yahoo' | 'twse' | 'tpex' | 'fallback';
-      updatedAt: string;
-    }
-  >;
+  quotes: Record<string, LiveQuoteItem>;
   fetchedAt: string;
+}
+
+/**
+ * 查詢任一單檔股票（台股上市/上櫃/興櫃、美股、ETF、基金）即時盤中報價
+ */
+export async function fetchRealtimeQuote(rawSymbol: string): Promise<LiveQuoteItem | null> {
+  const clean = rawSymbol.trim().toUpperCase();
+  if (!clean) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(clean)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (res.ok) {
+      const data = (await res.json()) as ApiQuotesResponse;
+      const baseCode = clean.replace(/\.(TW|TWO)$/i, '');
+      const hit =
+        data.quotes[clean] ||
+        data.quotes[`${baseCode}.TW`] ||
+        data.quotes[`${baseCode}.TWO`] ||
+        data.quotes[baseCode];
+      if (hit && hit.price > 0) {
+        return hit;
+      }
+    }
+  } catch {
+    // network failure fallback
+  }
+
+  return null;
+}
+
+/**
+ * 批次查詢多檔股票即時盤中報價
+ */
+export async function fetchBatchRealtimeQuotes(
+  symbols: string[]
+): Promise<Record<string, LiveQuoteItem>> {
+  const cleanSymbols = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()))).filter(Boolean);
+  if (cleanSymbols.length === 0) return {};
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(cleanSymbols.join(','))}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (res.ok) {
+      const data = (await res.json()) as ApiQuotesResponse;
+      return data.quotes || {};
+    }
+  } catch {
+    // fallback
+  }
+
+  return {};
 }
 
 export async function fetchLatestExchangeRates(
@@ -367,7 +433,7 @@ export async function syncAllHoldingsQuotes(
   updatedHoldings: SecurityHolding[];
   exchangeRateUsdTwd: number;
   exchangeRates: ExchangeRatesTable;
-  apiQuotes: Record<string, { price: number; previousClose?: number; updatedAt: string; source: string }>;
+  apiQuotes: Record<string, LiveQuoteItem>;
   isSuccess: boolean;
   refreshedAt: string;
 }> {

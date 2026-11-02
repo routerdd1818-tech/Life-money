@@ -62,6 +62,11 @@ import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
 import { IndustryMapView } from '../components/IndustryMapView';
 import { getSupplyChainPositionBadge } from '../services/supplyChainPropagationEngine';
 import { generateAIStockReport } from '../services/aiStockAnalysisEngine';
+import {
+  fetchBatchRealtimeQuotes,
+  fetchRealtimeQuote,
+  LiveQuoteItem,
+} from '../services/quoteService';
 
 type MainTab = 'watchlist' | 'rankings' | 'rotation' | 'industries' | 'strategies';
 type ModalViewMode = 'kline' | 'ai_fundamental' | 'industry_map';
@@ -98,6 +103,20 @@ export const StockScreenerView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isResolvingStock, setIsResolvingStock] = useState<string | null>(null);
 
+  // 全市場即時報價快顯表 (搜尋即時顯示真實價格與漲跌)
+  const [liveSearchQuotes, setLiveSearchQuotes] = useState<Record<string, LiveQuoteItem>>({});
+
+  // 抽屜個股即時行情資訊 (來源、更新時間、盤中最高、最低、開盤、成交量)
+  const [isDetailQuoteRefreshing, setIsDetailQuoteRefreshing] = useState<boolean>(false);
+  const [detailLiveMeta, setDetailLiveMeta] = useState<{
+    source: string;
+    updatedAt: string;
+    high?: number;
+    low?: number;
+    open?: number;
+    volumeLots?: number;
+  } | null>(null);
+
   // 1.2 自動同步機制：在進入自選或排行頁籤時，若距離上次刷新超過 45 秒，背景自動無感同步
   useEffect(() => {
     if (activeTab === 'watchlist' || activeTab === 'rankings') {
@@ -110,6 +129,17 @@ export const StockScreenerView: React.FC = () => {
       }
     }
   }, [activeTab]);
+
+  // 自選與排行背景週期自動輪詢 (每 20 秒自動更新盤中最新撮合價)
+  useEffect(() => {
+    if (activeTab !== 'watchlist' && activeTab !== 'rankings') return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible' && !isQuoteSyncing) {
+        void refreshQuotes();
+      }
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [activeTab, isQuoteSyncing]);
 
   // 1.5 行情排行狀態 (漲跌榜 / 買賣超榜 / 成交金額)
   const [activeRankingType, setActiveRankingType] = useState<MarketRankingType>('gainers');
@@ -238,12 +268,29 @@ export const StockScreenerView: React.FC = () => {
     return results;
   }, [screenerStocks, searchQuery]);
 
+  // 搜尋結果變動時，自動為前 10 檔尚未取得報價的標的批次拉取即時盤中成交價
+  useEffect(() => {
+    if (searchResults.length === 0) return;
+    const symbolsToFetch = searchResults
+      .slice(0, 10)
+      .map((r) => r.id || r.symbol.replace(/\.(TW|TWO)$/i, ''))
+      .filter((id) => !liveSearchQuotes[id]);
+
+    if (symbolsToFetch.length === 0) return;
+
+    void fetchBatchRealtimeQuotes(symbolsToFetch).then((quotes) => {
+      if (quotes && Object.keys(quotes).length > 0) {
+        setLiveSearchQuotes((prev) => ({ ...prev, ...quotes }));
+      }
+    });
+  }, [searchResults]);
+
   // 8. 策略選股符合條件標的
   const { passedStocks } = useMemo(() => {
     return evaluateBottomUpFunnel(screenerStocks, criteria);
   }, [screenerStocks, criteria]);
 
-  // 9. 安全開啟股票詳情 (防空保底，保證 100% 成功滑出抽屜)
+  // 9. 安全開啟股票詳情 (防空保底，保證 100% 成功滑出抽屜並同步拉取盤中即時報價)
   const handleOpenStock = async (
     item: ScreenerStockItem | UnifiedSearchItem | TaiwanStockBasicInfo | WatchlistStockItem
   ) => {
@@ -318,7 +365,73 @@ export const StockScreenerView: React.FC = () => {
 
     setDetailStock(target);
     setModalMode('kline'); // 預設開啟 K 線走勢
+
+    // 立即向官方 TWSE / TPEx MIS 雙軌引擎拉取即時盤中最新撮合價
+    if (target) {
+      setIsDetailQuoteRefreshing(true);
+      const targetSymbol = target.symbol;
+      void fetchRealtimeQuote(targetSymbol).then((live) => {
+        setIsDetailQuoteRefreshing(false);
+        if (live && live.price > 0) {
+          setDetailLiveMeta({
+            source: live.source,
+            updatedAt: live.updatedAt,
+            high: live.high,
+            low: live.low,
+            open: live.open,
+            volumeLots: live.volumeLots,
+          });
+          const updated: ScreenerStockItem = {
+            ...target!,
+            price: live.price,
+            dailyChangePct: live.dailyChangePct ?? target!.dailyChangePct,
+            atr14: Math.max(0.5, Math.round(live.price * 0.03 * 10) / 10),
+          };
+          setDetailStock((curr) => (curr && curr.symbol === targetSymbol ? updated : curr));
+          upsertScreenerStock(updated);
+        }
+      });
+    }
   };
+
+  const refreshDetailStockQuoteNow = async () => {
+    if (!detailStock) return;
+    setIsDetailQuoteRefreshing(true);
+    try {
+      const live = await fetchRealtimeQuote(detailStock.symbol);
+      if (live && live.price > 0) {
+        setDetailLiveMeta({
+          source: live.source,
+          updatedAt: live.updatedAt,
+          high: live.high,
+          low: live.low,
+          open: live.open,
+          volumeLots: live.volumeLots,
+        });
+        const updated: ScreenerStockItem = {
+          ...detailStock,
+          price: live.price,
+          dailyChangePct: live.dailyChangePct ?? detailStock.dailyChangePct,
+          atr14: Math.max(0.5, Math.round(live.price * 0.03 * 10) / 10),
+        };
+        setDetailStock(updated);
+        upsertScreenerStock(updated);
+      }
+    } finally {
+      setIsDetailQuoteRefreshing(false);
+    }
+  };
+
+  // 當個股抽屜開啟時，每 10 秒自動輪詢最新盤中報價
+  useEffect(() => {
+    if (!detailStock) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible' && !isDetailQuoteRefreshing) {
+        void refreshDetailStockQuoteNow();
+      }
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [detailStock?.symbol]);
 
   // 10. 自選判斷 (防禦性檢查，避免 undefined throw error)
   const isInWatchlist = (symbol?: string) => {
@@ -504,21 +617,39 @@ export const StockScreenerView: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {item.stockItem && (
-                        <div className="text-right tabular-nums">
-                          <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
-                            NT$ {item.stockItem.price}
-                          </div>
-                          <div
-                            className={`text-[10px] font-bold ${
-                              item.stockItem.dailyChangePct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
-                            }`}
-                          >
-                            {item.stockItem.dailyChangePct >= 0 ? '+' : ''}
-                            {item.stockItem.dailyChangePct}%
-                          </div>
-                        </div>
-                      )}
+                      {(() => {
+                        const cleanSym = item.symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase();
+                        const live =
+                          liveSearchQuotes[item.symbol] ||
+                          liveSearchQuotes[cleanSym] ||
+                          (item.id ? liveSearchQuotes[item.id] : undefined);
+                        const price = live?.price ?? item.stockItem?.price;
+                        const pct =
+                          typeof live?.dailyChangePct === 'number'
+                            ? live.dailyChangePct
+                            : item.stockItem?.dailyChangePct;
+
+                        if (price !== undefined && price > 0) {
+                          return (
+                            <div className="text-right tabular-nums">
+                              <div className="text-sm font-bold text-[#191F28] dark:text-[#F2F4F8]">
+                                NT$ {price.toLocaleString()}
+                              </div>
+                              {typeof pct === 'number' && (
+                                <div
+                                  className={`text-[10px] font-bold ${
+                                    pct >= 0 ? 'text-[#F04452]' : 'text-[#059669]'
+                                  }`}
+                                >
+                                  {pct >= 0 ? '+' : ''}
+                                  {pct}%
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       <ChevronRight className="w-4 h-4 text-[#8B95A1]" />
                     </div>
                   </div>
@@ -1356,21 +1487,50 @@ export const StockScreenerView: React.FC = () => {
                     {detailStock.sectorName}
                   </span>
                 </div>
-                <div className="flex items-baseline gap-2 mt-0.5 tabular-nums">
-                  <span className="text-xl font-black text-[#191F28] dark:text-white">
-                    NT$ {detailStock.price.toLocaleString()}
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-baseline gap-2 tabular-nums">
+                    <span className="text-xl font-black text-[#191F28] dark:text-white">
+                      NT$ {detailStock.price.toLocaleString()}
+                    </span>
+                    <span
+                      className={`text-xs font-bold px-1.5 py-0.2 rounded ${
+                        detailStock.dailyChangePct >= 0
+                          ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
+                          : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
+                      }`}
+                    >
+                      {detailStock.dailyChangePct >= 0 ? '+' : ''}
+                      {detailStock.dailyChangePct}%
+                    </span>
+                  </div>
+
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>即時盤中</span>
                   </span>
-                  <span
-                    className={`text-xs font-bold px-1.5 py-0.2 rounded ${
-                      detailStock.dailyChangePct >= 0
-                        ? 'bg-rose-50 text-[#F04452] dark:bg-rose-950/40'
-                        : 'bg-emerald-50 text-[#059669] dark:bg-emerald-950/40'
-                    }`}
+
+                  <button
+                    type="button"
+                    onClick={() => void refreshDetailStockQuoteNow()}
+                    disabled={isDetailQuoteRefreshing}
+                    title="立即手動刷新盤中最新成交價"
+                    className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-[#8B95A1] hover:text-[#2563EB] transition-colors"
                   >
-                    {detailStock.dailyChangePct >= 0 ? '+' : ''}
-                    {detailStock.dailyChangePct}%
-                  </span>
+                    <RefreshCw className={`w-3.5 h-3.5 ${isDetailQuoteRefreshing ? 'animate-spin text-[#2563EB]' : ''}`} />
+                  </button>
                 </div>
+
+                {detailLiveMeta && (
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-[#8B95A1] tabular-nums flex-wrap">
+                    {detailLiveMeta.open !== undefined && <span>開盤 {detailLiveMeta.open}</span>}
+                    {detailLiveMeta.high !== undefined && <span>最高 {detailLiveMeta.high}</span>}
+                    {detailLiveMeta.low !== undefined && <span>最低 {detailLiveMeta.low}</span>}
+                    {detailLiveMeta.volumeLots !== undefined && (
+                      <span>量 {detailLiveMeta.volumeLots.toLocaleString()} 張</span>
+                    )}
+                    <span className="text-slate-400">({detailLiveMeta.source.toUpperCase()})</span>
+                  </div>
+                )}
               </div>
 
               <button

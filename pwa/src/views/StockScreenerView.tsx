@@ -60,10 +60,12 @@ import {
 } from '../services/industryUniverseService';
 import { AIAnalysisReportView } from '../components/AIAnalysisReportView';
 import { IndustryMapView } from '../components/IndustryMapView';
+import { getSupplyChainPositionBadge } from '../services/supplyChainPropagationEngine';
+import { generateAIStockReport } from '../services/aiStockAnalysisEngine';
 
 type MainTab = 'watchlist' | 'rankings' | 'rotation' | 'industries' | 'strategies';
 type ModalViewMode = 'kline' | 'ai_fundamental' | 'industry_map';
-type StrategyCategory = 'all' | 'inst' | 'technical' | 'value' | 'bearish';
+type StrategyCategory = 'all' | 'chain' | 'inst' | 'technical' | 'value' | 'bearish';
 
 interface UnifiedSearchItem {
   id: string;
@@ -133,6 +135,11 @@ export const StockScreenerView: React.FC = () => {
   // 依風格分類過濾之策略清單
   const filteredStrategies = useMemo(() => {
     if (strategyCat === 'all') return QUANT_STRATEGIES;
+    if (strategyCat === 'chain') {
+      return QUANT_STRATEGIES.filter((s) =>
+        ['upstream_surge_lead_lag', 'chain_leader_momentum', 'chain_consensus_inst_buy'].includes(s.id)
+      );
+    }
     if (strategyCat === 'inst') {
       return QUANT_STRATEGIES.filter((s) =>
         ['highest_win_rate_alpha', 'trust_momentum', 'ma_ribbon_surge', 'sector_leader_flow'].includes(s.id)
@@ -157,6 +164,11 @@ export const StockScreenerView: React.FC = () => {
   // 4. 股票詳情底層抽屜狀態 (直覺切換: K線走勢 vs AI深度決策)
   const [detailStock, setDetailStock] = useState<ScreenerStockItem | null>(null);
   const [modalMode, setModalMode] = useState<ModalViewMode>('kline');
+
+  const detailReport = useMemo(() => {
+    if (!detailStock) return null;
+    return generateAIStockReport(detailStock, screenerStocks);
+  }, [detailStock, screenerStocks]);
 
   // 5. 整合全市場官方產業與熱門概念群組 (以概念優先排序)
   const allGroups = useMemo<IndustryGroupMeta[]>(() => {
@@ -634,6 +646,11 @@ export const StockScreenerView: React.FC = () => {
                       <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
                         {item.sectorName}
                       </span>
+                      {stock && (
+                        <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 text-[10px] font-medium border border-indigo-200/50">
+                          {getSupplyChainPositionBadge(stock).badgeText}
+                        </span>
+                      )}
                     </div>
                     <div className="text-[11px] text-[#8B95A1]">
                       {stock ? `ROE ${stock.roePct}% · PE ${stock.peRatio}x` : '自選追蹤標的'}
@@ -1108,6 +1125,7 @@ export const StockScreenerView: React.FC = () => {
             {(
               [
                 { id: 'all', label: `全部策略 (${QUANT_STRATEGIES.length})` },
+                { id: 'chain', label: '供應鏈共振 (3)' },
                 { id: 'inst', label: '法人主力 (4)' },
                 { id: 'technical', label: '技術指標 (3)' },
                 { id: 'value', label: '價值成長 (4)' },
@@ -1261,6 +1279,9 @@ export const StockScreenerView: React.FC = () => {
                         <span className="px-1.5 py-0.2 rounded bg-[#F0F2F6] dark:bg-[#1F2631] text-[10px] text-[#8B95A1]">
                           {stock.sectorName}
                         </span>
+                        <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 text-[10px] font-medium border border-indigo-200/50">
+                          {getSupplyChainPositionBadge(stock).badgeText}
+                        </span>
                         <span
                           className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
                             isBearish
@@ -1360,6 +1381,29 @@ export const StockScreenerView: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* 抽屜頂部快顯條：AI 綜合評分量表 + 供應鏈位階 + 一句話定調 */}
+            {detailReport && (
+              <div className="px-4 py-2 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-purple-50/70 dark:from-blue-950/30 dark:via-[#161B22] dark:to-purple-950/20 border-b border-[#EAEDF2] dark:border-[#262C36] flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#2563EB] text-white flex items-center gap-1 shadow-2xs">
+                    <Sparkles className="w-3 h-3" />
+                    <span>AI 趨勢評分：{detailReport.trendScore} 分 · {detailReport.trendLabel}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalMode('industry_map')}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/90 dark:bg-[#161B22] text-[#2563EB] dark:text-blue-300 border border-blue-200 dark:border-blue-900/60 hover:bg-blue-50 transition-colors flex items-center gap-1"
+                  >
+                    <Network className="w-2.5 h-2.5" />
+                    <span>{getSupplyChainPositionBadge(detailStock).badgeText}</span>
+                  </button>
+                </div>
+                <div className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0] line-clamp-1 italic font-medium">
+                  「{detailReport.actionAdvice}」
+                </div>
+              </div>
+            )}
 
             {/* 三切換分頁標籤 (K 線走勢 vs AI 深度決策 vs 產業地圖與供應鏈) */}
             <div className="flex border-b border-[#EAEDF2] dark:border-[#262C36] bg-[#F6F7F9] dark:bg-[#161B22] text-xs font-bold px-2 pt-1 gap-1">

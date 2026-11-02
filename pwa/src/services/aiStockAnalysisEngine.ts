@@ -66,6 +66,30 @@ export interface GeminiInsight {
   generatedAt: string;
 }
 
+export type HorizonBias = 'BULLISH' | 'NEUTRAL' | 'BEARISH';
+
+export interface HorizonEvaluationItem {
+  horizon: 'short' | 'medium' | 'long';
+  horizonLabel: string;
+  timeframe: string;
+  bias: HorizonBias;
+  biasLabel: string;
+  score: number;
+  keyFactors: string[];
+  focusLevel: string;
+  summary: string;
+  strategyGuide: string;
+}
+
+export interface MultiHorizonAnalysis {
+  shortTerm: HorizonEvaluationItem;
+  mediumTerm: HorizonEvaluationItem;
+  longTerm: HorizonEvaluationItem;
+  alignment: 'all_bullish' | 'all_bearish' | 'short_weak_long_strong' | 'short_strong_long_weak' | 'mixed';
+  alignmentLabel: string;
+  summaryInsight: string;
+}
+
 export interface AIStockAnalysisReport {
   symbol: string;
   name: string;
@@ -77,6 +101,8 @@ export interface AIStockAnalysisReport {
   trendScore: number; // 0 ~ 100
   trendSummary: string;
   actionAdvice: string;
+  // 1.5 長·中·短三期全面評估 (Horizon Evaluation)
+  horizons: MultiHorizonAnalysis;
   // 2. 關鍵點位階梯
   ladder: PriceLadder;
   // 3. 價格合理性
@@ -91,6 +117,261 @@ export interface AIStockAnalysisReport {
   catalystSummary: string;
   // 7. Google Gemini 3.5 旗艦大語言模型深度思考觀點
   geminiInsight?: GeminiInsight;
+}
+
+/**
+ * 長·中·短三期量化評估計算
+ */
+export function calculateMultiHorizonEvaluation(
+  target: ScreenerStockItem,
+  p0: number,
+  atr: number,
+  ladder: PriceLadder,
+  discountPremiumPct: number
+): MultiHorizonAnalysis {
+  // 1. 短期評估 (1~10 個交易日) - 聚焦極短線籌碼、今日漲跌與 5MA 攻防
+  let shortScore = 50;
+  if (target.instNetBuy5dLots > 500) shortScore += 16;
+  else if (target.instNetBuy5dLots > 0) shortScore += 8;
+  else if (target.instNetBuy5dLots < -500) shortScore -= 18;
+  else if (target.instNetBuy5dLots < 0) shortScore -= 10;
+
+  if (target.dailyChangePct >= 2.0) shortScore += 12;
+  else if (target.dailyChangePct >= 0) shortScore += 5;
+  else if (target.dailyChangePct <= -2.5) shortScore -= 14;
+  else shortScore -= 6;
+
+  if (target.aboveMa60) shortScore += 6;
+  else shortScore -= 8;
+
+  shortScore = Math.min(96, Math.max(10, Math.round(shortScore)));
+
+  let shortBias: HorizonBias = 'NEUTRAL';
+  let shortBiasLabel = '區間震盪整理';
+  let shortFactors: string[] = [];
+  let shortSummary = '';
+  let shortGuide = '';
+
+  if (shortScore >= 66) {
+    shortBias = 'BULLISH';
+    shortBiasLabel = '短多強勢表態';
+    shortFactors = [
+      `三大法人近5日買超 ${target.instNetBuy5dLots > 0 ? '+' : ''}${target.instNetBuy5dLots.toLocaleString()} 張`,
+      `今日股價動能強勁 (${target.dailyChangePct >= 0 ? '+' : ''}${target.dailyChangePct}%)`,
+      `站穩短期均線支撐`,
+    ];
+    shortSummary = '短線買盤追價意願積極，量價結構偏多，有機會向短線目標發起挑戰。';
+    shortGuide = `沿 5MA 移動停利，以短線防守點 NT$ ${ladder.slPrice} 設停損，達 TP1 NT$ ${ladder.tp1Price} 適度減碼保本。`;
+  } else if (shortScore <= 38) {
+    shortBias = 'BEARISH';
+    shortBiasLabel = '短線承壓回檔';
+    shortFactors = [
+      `三大法人近5日調節賣超 ${Math.abs(target.instNetBuy5dLots).toLocaleString()} 張`,
+      `短線動能走疲 (${target.dailyChangePct}%)`,
+      `短期均線蓋頭承壓`,
+    ];
+    shortSummary = '短線籌碼鬆動，買盤追價動能不足，恐持續向下尋求短線支撐。';
+    shortGuide = `短線嚴禁追高，持股者逢反彈靠近壓力應分批減碼避險，慎防短線跌破防守點 NT$ ${ladder.slPrice}。`;
+  } else {
+    shortBias = 'NEUTRAL';
+    shortBiasLabel = '短線多空拉鋸';
+    shortFactors = [
+      `法人籌碼多空互見 (${target.instNetBuy5dLots > 0 ? '+' : ''}${target.instNetBuy5dLots.toLocaleString()} 張)`,
+      `短線進入狹幅箱型`,
+      `等待量能方向突破`,
+    ];
+    shortSummary = '多空力道互不相讓，量能維持平淡，短線以箱型震盪為主。';
+    shortGuide = `短線採取「箱型下緣低接、箱型上緣調節」策略，嚴格遵守區間紀律。`;
+  }
+
+  const shortTerm: HorizonEvaluationItem = {
+    horizon: 'short',
+    horizonLabel: '短期評估',
+    timeframe: '1 ~ 10 個交易日 (極短線)',
+    bias: shortBias,
+    biasLabel: shortBiasLabel,
+    score: shortScore,
+    keyFactors: shortFactors,
+    focusLevel: `支撐 NT$ ${ladder.slPrice} / 壓力 NT$ ${ladder.tp1Price}`,
+    summary: shortSummary,
+    strategyGuide: shortGuide,
+  };
+
+  // 2. 中期評估 (1~3 個月 / 20~60 個交易日) - 聚焦季線趨勢、投信作帳與營收成長
+  let midScore = 50;
+  if (target.aboveMa60) midScore += 16;
+  else midScore -= 20;
+
+  if (target.momentum60dPct >= 12) midScore += 14;
+  else if (target.momentum60dPct >= 0) midScore += 6;
+  else if (target.momentum60dPct <= -12) midScore -= 18;
+  else midScore -= 8;
+
+  if (target.trustNetBuy5dLots > 200) midScore += 12;
+  else if (target.trustNetBuy5dLots > 0) midScore += 6;
+  else if (target.trustNetBuy5dLots < -200) midScore -= 12;
+
+  if (target.revenueYoYPct >= 15) midScore += 12;
+  else if (target.revenueYoYPct >= 0) midScore += 4;
+  else if (target.revenueYoYPct <= -15) midScore -= 16;
+  else midScore -= 8;
+
+  midScore = Math.min(96, Math.max(10, Math.round(midScore)));
+
+  let midBias: HorizonBias = 'NEUTRAL';
+  let midBiasLabel = '波段橫盤整理';
+  let midFactors: string[] = [];
+  let midSummary = '';
+  let midGuide = '';
+
+  if (midScore >= 65) {
+    midBias = 'BULLISH';
+    midBiasLabel = '波段多頭主升';
+    midFactors = [
+      '股價站穩 60MA 季線生命線',
+      `60日價格動能強勁 (+${target.momentum60dPct}%)`,
+      `月營收年增率表現優異 (+${target.revenueYoYPct}%)`,
+    ];
+    midSummary = '中期多頭架構完整，季線維持揚升，營收成長為波段行情的最大底氣。';
+    midGuide = `季線不破波段續抱，波段獲利目標鎖定同業公允價 TP2 NT$ ${ladder.tp2Price}。`;
+  } else if (midScore <= 40) {
+    midBias = 'BEARISH';
+    midBiasLabel = '波段空方破線';
+    midFactors = [
+      '跌破 60MA 季線關鍵生命線',
+      `60日動能疲弱下彎 (${target.momentum60dPct}%)`,
+      target.revenueYoYPct < 0 ? `月營收陷入衰退 (${target.revenueYoYPct}%)` : '中期賣壓沉重',
+    ];
+    midSummary = '中期均線下彎蓋頭形成反壓，波段趨勢由多轉空，籌碼有持續沉澱需求。';
+    midGuide = `波段部位應確實減碼或出清避險，切勿在季線下彎階段盲目攤平，靜待底部型態浮現。`;
+  } else {
+    midBias = 'NEUTRAL';
+    midBiasLabel = '季線附近打底';
+    midFactors = [
+      '股價於季線上下反覆測試',
+      `月營收年增持平 (${target.revenueYoYPct >= 0 ? '+' : ''}${target.revenueYoYPct}%)`,
+      '波段方向等待次季展望確認',
+    ];
+    midSummary = '中期進入籌碼整理期，均線斜率平緩，需要下個月營收或法說會催化劑打破僵局。';
+    midGuide = `建議波段投資人耐住性子，待股價帶量突破季線上方壓力時再順勢加碼。`;
+  }
+
+  const mediumTerm: HorizonEvaluationItem = {
+    horizon: 'medium',
+    horizonLabel: '中期評估',
+    timeframe: '1 ~ 3 個月 (波段趨勢)',
+    bias: midBias,
+    biasLabel: midBiasLabel,
+    score: midScore,
+    keyFactors: midFactors,
+    focusLevel: `季線防守 / 公允目標價 NT$ ${ladder.tp2Price}`,
+    summary: midSummary,
+    strategyGuide: midGuide,
+  };
+
+  // 3. 長期評估 (半年~1年以上 / 120~240 個交易日) - 聚焦年線、ROE護城河、現金流與估值
+  let longScore = 50;
+  if (target.aboveMa240) longScore += 16;
+  else longScore -= 18;
+
+  if (target.roePct >= 20) longScore += 18;
+  else if (target.roePct >= 12) longScore += 10;
+  else if (target.roePct < 5) longScore -= 14;
+
+  if (target.freeCashFlowPositive) longScore += 12;
+  else longScore -= 12;
+
+  if (target.grossMarginPct >= 40) longScore += 10;
+  else if (target.grossMarginPct >= 20) longScore += 4;
+  else if (target.grossMarginPct < 10) longScore -= 8;
+
+  if (discountPremiumPct <= -10) longScore += 8;
+  else if (discountPremiumPct > 35) longScore -= 10;
+
+  longScore = Math.min(98, Math.max(10, Math.round(longScore)));
+
+  let longBias: HorizonBias = 'NEUTRAL';
+  let longBiasLabel = '長期價值觀察';
+  let longFactors: string[] = [];
+  let longSummary = '';
+  let longGuide = '';
+
+  if (longScore >= 68) {
+    longBias = 'BULLISH';
+    longBiasLabel = '長多護城河卓越';
+    longFactors = [
+      `股東權益報酬率 ROE ${target.roePct}% (資本效率優異)`,
+      '自由現金流常年正向，具備抗景氣下行韌性',
+      `站穩 240MA 年線生命線，長期多頭確立`,
+    ];
+    longSummary = '具備厚實的獲利護城河與優異的股東回報，在所屬產業分工中佔據關鍵議價地位。';
+    longGuide = `極適合長期價值型投資人或定期定額存股，長期目標上看 TP3 龍頭溢價 NT$ ${ladder.tp3Price}。`;
+  } else if (longScore <= 40) {
+    longBias = 'BEARISH';
+    longBiasLabel = '長線競爭力弱化';
+    longFactors = [
+      `資本效率不足 (ROE 僅 ${target.roePct}%)`,
+      !target.freeCashFlowPositive ? '自由現金流緊縮，資本支出壓力大' : '長線毛利受壓抑',
+      '股價長期受制於年線下方',
+    ];
+    longSummary = '長期獲利成長性與護城河較為脆弱，易受景氣逆風或同業削價競爭影響。';
+    longGuide = `不建議作為長期存股標的，若有反彈應將資金轉移至產業龍頭或高 ROE 護城河企業。`;
+  } else {
+    longBias = 'NEUTRAL';
+    longBiasLabel = '長期景氣循環';
+    longFactors = [
+      `ROE ${target.roePct}% 處於歷史常態中軸`,
+      '營運高度連動產業總經循環',
+      `目前估值折溢價 ${discountPremiumPct}% 相對中性`,
+    ];
+    longSummary = '企業體質穩定但受產業週期波動制約，適合在循環底部買進、循環頂部出場。';
+    longGuide = `以逢低買進防禦策略為主，耐心等待新一輪產業向上擴張週期來臨。`;
+  }
+
+  const longTerm: HorizonEvaluationItem = {
+    horizon: 'long',
+    horizonLabel: '長期評估',
+    timeframe: '半年 ~ 1 年以上 (價值成長)',
+    bias: longBias,
+    biasLabel: longBiasLabel,
+    score: longScore,
+    keyFactors: longFactors,
+    focusLevel: `年線生命線 / 終極目標 NT$ ${ladder.tp3Price}`,
+    summary: longSummary,
+    strategyGuide: longGuide,
+  };
+
+  // 4. 三期共振對齊分析 (Alignment)
+  let alignment: MultiHorizonAnalysis['alignment'] = 'mixed';
+  let alignmentLabel = '長中短多空分歧 · 箱型整理';
+  let summaryInsight = '各週期多空訊號互有拉鋸，操作上應明確切分短線進出與中長線部位，切忌混淆週期。';
+
+  if (shortBias === 'BULLISH' && midBias === 'BULLISH' && longBias === 'BULLISH') {
+    alignment = 'all_bullish';
+    alignmentLabel = '長中短三期共振看多 (多方最強極品)';
+    summaryInsight = '極短線資金充沛、波段季線強勁揚升、長線基本面護城河深厚，為勝率最高的多頭黃金階段！';
+  } else if (shortBias === 'BEARISH' && midBias === 'BEARISH' && longBias === 'BEARISH') {
+    alignment = 'all_bearish';
+    alignmentLabel = '長中短三期全面走空 (破線嚴控風險)';
+    summaryInsight = '短線賣壓沉重、季線下彎、長線競爭力衰退，三期全面偏空，持股應徹底減碼避險。';
+  } else if (shortBias === 'BEARISH' && (midBias === 'BULLISH' || longBias === 'BULLISH')) {
+    alignment = 'short_weak_long_strong';
+    alignmentLabel = '短線良性拉回 · 中長多頭格局 (逢低買點)';
+    summaryInsight = '長中線趨勢依然向好，短線修正僅為籌碼獲利了結洗盤，拉回關鍵支撐反為極佳波段買點。';
+  } else if (shortBias === 'BULLISH' && (midBias === 'BEARISH' || longBias === 'BEARISH')) {
+    alignment = 'short_strong_long_weak';
+    alignmentLabel = '短線超跌反彈 · 中長期趨勢仍空 (反彈逃命)';
+    summaryInsight = '短線急拉屬於跌深反彈或隔日沖軋空，中長期均線仍處空方壓制，切勿誤判為長線反轉！';
+  }
+
+  return {
+    shortTerm,
+    mediumTerm,
+    longTerm,
+    alignment,
+    alignmentLabel,
+    summaryInsight,
+  };
 }
 
 /**
@@ -267,6 +548,9 @@ export function generateAIStockReport(
     atr14: atr,
   };
 
+  // 2.5 長·中·短三期全面評估 (Horizon Evaluation)
+  const horizons = calculateMultiHorizonEvaluation(target, p0, atr, ladder, discountPremiumPct);
+
   // 3. 價格合理性評估
   let valStatus: ValuationStatus = 'FAIR';
   let valLabel = '價格落在合理估值區間';
@@ -394,6 +678,7 @@ export function generateAIStockReport(
     trendScore,
     trendSummary,
     actionAdvice,
+    horizons,
     ladder,
     valuation,
     fundamental,
@@ -425,6 +710,7 @@ export async function enrichReportWithGemini(
         trendLabel: baseReport.trendLabel,
         trendSummary: baseReport.trendSummary,
         actionAdvice: baseReport.actionAdvice,
+        horizons: baseReport.horizons,
         ladder: baseReport.ladder,
         valuation: baseReport.valuation,
         fundamental: baseReport.fundamental,

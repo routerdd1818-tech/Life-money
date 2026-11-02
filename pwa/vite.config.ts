@@ -216,6 +216,11 @@ function freeQuoteApiDevPlugin(): Plugin {
 - 量化多空定調：${parsed.trendLabel || '區間震盪整理'} (多空力道指數: ${parsed.trendScore || 50} / 100，型態評級: ${parsed.trendBias || 'CONSOLIDATION'})
 - 趨勢特徵診斷：${parsed.trendSummary || '均線與籌碼進入關鍵抉擇期'}
 - 量化操作指引：${parsed.actionAdvice || '依照點位紀律操作'}
+【長·中·短三期量化評估與共振判定】
+- 三期對齊共振：${parsed.horizons?.alignmentLabel || '長中短多空分歧'}
+- 短期 (1~10日極短線)：${parsed.horizons?.shortTerm?.biasLabel || '短線整理'} (關注點位: ${parsed.horizons?.shortTerm?.focusLevel || '支撐/壓力'})
+- 中期 (1~3個月波段)：${parsed.horizons?.mediumTerm?.biasLabel || '波段整理'} (波段目標: ${parsed.horizons?.mediumTerm?.focusLevel || '季線/TP2'})
+- 長期 (半年~1年價值)：${parsed.horizons?.longTerm?.biasLabel || '價值觀察'} (長線目標: ${parsed.horizons?.longTerm?.focusLevel || '年線/TP3'})
 【交易關鍵價位】
 ${
   isBearishTrend

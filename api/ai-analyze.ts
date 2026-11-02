@@ -50,6 +50,7 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       trendLabel = '區間震盪整理',
       trendSummary = '',
       actionAdvice = '',
+      horizons = {},
       ladder = {},
       valuation = {},
       fundamental = {},
@@ -99,6 +100,12 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
 - 趨勢特徵診斷：${trendSummary || '均線與籌碼進入關鍵抉擇期'}
 - 量化操作指引：${actionAdvice || '依照點位紀律操作'}
 
+【長·中·短三期量化評估與共振判定】
+- 三期對齊共振：${horizons.alignmentLabel || '長中短多空分歧'}
+- 短期評估 (1~10日極短線)：${horizons.shortTerm?.biasLabel || '短線整理'} (評分: ${horizons.shortTerm?.score || 50}/100，關注點位: ${horizons.shortTerm?.focusLevel || '支撐/壓力'})
+- 中期評估 (1~3個月波段)：${horizons.mediumTerm?.biasLabel || '波段整理'} (評分: ${horizons.mediumTerm?.score || 50}/100，波段目標: ${horizons.mediumTerm?.focusLevel || '季線/TP2'})
+- 長期評估 (半年~1年價值)：${horizons.longTerm?.biasLabel || '價值觀察'} (評分: ${horizons.longTerm?.score || 50}/100，長線目標: ${horizons.longTerm?.focusLevel || '年線/TP3'})
+
 【交易關鍵價位】
 ${
   isBearishTrend
@@ -130,8 +137,8 @@ ${newsSummary}
 ---
 【輸出要求】
 請嚴格遵守以下四個段落架構輸出，語氣必須像資深操盤手在作晨會晨報，結論先行、段落清晰、講真話：
-1. 【多空定調與核心結論】：明確依據量化多空判定（${trendLabel}，力道指數 ${trendScore}/100）。若為「弱勢偏空」或「空頭破線」，必須嚴正定調為防守/避險/出清，嚴禁盲目喊多或粉飾太平！
-2. 【操盤手深度思路與攻防節奏】：分析主力與法人買賣心態。若偏多，分析 SL 防守與 TP1/TP2 攻防；若偏空或破線，分析上方反壓解套點、下檔支撐破底危機與持股減碼時機。
+1. 【多空定調與三期共振】：明確依據量化多空判定（${trendLabel}，力道指數 ${trendScore}/100）。若為「弱勢偏空」或「空頭破線」，必須嚴正定調為防守/避險/出清，嚴禁盲目喊多或粉飾太平！
+2. 【長·中·短三期實戰攻防思路】：分別切分「短期（1~10日極短線衝刺與防守點位）」、「中期（1~3個月波段季線攻防與TP2目標）」與「長期（半年~1年護城河與TP3龍頭溢價）」具體分析主力買賣心態與部位調配建議。
 3. 【同業折溢價與基本面質化觀點】：剖析當前相對於同業是遭錯殺低估還是估值過高，以及基本面護城河是否支撐股價。
 4. 【黑天鵝風險與避坑叮嚀】：結合近期新聞與產業景氣，點出最該防備的 1~2 個致命破線或產業風險。
 

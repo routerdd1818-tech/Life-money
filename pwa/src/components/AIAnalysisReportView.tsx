@@ -97,7 +97,7 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
     );
   }
 
-  const { trendBias, ladder, valuation, fundamental, peers } = report;
+  const { trendBias, horizons, ladder, valuation, fundamental, peers } = report;
 
   return (
     <div className="space-y-4 text-xs select-none">
@@ -155,6 +155,220 @@ export const AIAnalysisReportView: React.FC<AIAnalysisReportViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* 1.2 長·中·短 三期全方位評估 (Short, Medium, Long Horizons) */}
+      {horizons && (
+        <div className="p-4 rounded-2xl bg-[#F6F7F9] dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 font-bold text-sm text-[#191F28] dark:text-white">
+              <Clock className="w-4 h-4 text-[#2563EB]" />
+              <span>長 · 中 · 短 三期全方位評估</span>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#2563EB] text-white shadow-2xs">
+              {horizons.alignmentLabel}
+            </span>
+          </div>
+
+          <p className="text-[11px] text-[#4E5968] dark:text-[#9BA4B0] leading-relaxed">
+            {horizons.summaryInsight}
+          </p>
+
+          {/* 三期卡片網格 (Mobile 1欄 / Desktop 3欄自適應) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            {/* 1. 短期評估 (1~10日極短線) */}
+            {(() => {
+              const h = horizons.shortTerm;
+              const isBull = h.bias === 'BULLISH';
+              const isBear = h.bias === 'BEARISH';
+              return (
+                <div
+                  className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all ${
+                    isBull
+                      ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-900/40'
+                      : isBear
+                        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40'
+                        : 'bg-white dark:bg-[#1F2631] border-[#EAEDF2] dark:border-[#262C36]'
+                  }`}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-[#191F28] dark:text-white">
+                        <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>短期評估</span>
+                      </div>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          isBull
+                            ? 'bg-rose-100 text-[#F04452] dark:bg-rose-950/80'
+                            : isBear
+                              ? 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/80'
+                              : 'bg-gray-100 text-[#4E5968] dark:bg-gray-800 dark:text-gray-300'
+                        }`}
+                      >
+                        {h.biasLabel} · {h.score}分
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-[#8B95A1] font-mono">
+                      週期：{h.timeframe}
+                    </div>
+
+                    <div className="text-[11px] font-medium text-[#191F28] dark:text-white leading-snug">
+                      {h.summary}
+                    </div>
+
+                    <div className="space-y-1 pt-1 border-t border-black/5 dark:border-white/5 text-[10px] text-[#4E5968] dark:text-[#9BA4B0]">
+                      {h.keyFactors.map((f, i) => (
+                        <div key={i} className="flex items-center gap-1 line-clamp-1">
+                          <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
+                          <span>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-1 text-[10px]">
+                    <div className="text-[#8B95A1] font-mono">
+                      關鍵點位：<span className="font-bold text-[#191F28] dark:text-white">{h.focusLevel}</span>
+                    </div>
+                    <div className="text-amber-800 dark:text-amber-300 font-medium">
+                      🎯 指引：{h.strategyGuide}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 2. 中期評估 (1~3個月波段) */}
+            {(() => {
+              const h = horizons.mediumTerm;
+              const isBull = h.bias === 'BULLISH';
+              const isBear = h.bias === 'BEARISH';
+              return (
+                <div
+                  className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all ${
+                    isBull
+                      ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-900/40'
+                      : isBear
+                        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40'
+                        : 'bg-white dark:bg-[#1F2631] border-[#EAEDF2] dark:border-[#262C36]'
+                  }`}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-[#191F28] dark:text-white">
+                        <TrendingUp className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <span>中期評估</span>
+                      </div>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          isBull
+                            ? 'bg-rose-100 text-[#F04452] dark:bg-rose-950/80'
+                            : isBear
+                              ? 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/80'
+                              : 'bg-gray-100 text-[#4E5968] dark:bg-gray-800 dark:text-gray-300'
+                        }`}
+                      >
+                        {h.biasLabel} · {h.score}分
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-[#8B95A1] font-mono">
+                      週期：{h.timeframe}
+                    </div>
+
+                    <div className="text-[11px] font-medium text-[#191F28] dark:text-white leading-snug">
+                      {h.summary}
+                    </div>
+
+                    <div className="space-y-1 pt-1 border-t border-black/5 dark:border-white/5 text-[10px] text-[#4E5968] dark:text-[#9BA4B0]">
+                      {h.keyFactors.map((f, i) => (
+                        <div key={i} className="flex items-center gap-1 line-clamp-1">
+                          <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
+                          <span>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-1 text-[10px]">
+                    <div className="text-[#8B95A1] font-mono">
+                      波段鎖定：<span className="font-bold text-[#191F28] dark:text-white">{h.focusLevel}</span>
+                    </div>
+                    <div className="text-blue-800 dark:text-blue-300 font-medium">
+                      🎯 指引：{h.strategyGuide}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 3. 長期評估 (半年~1年價值成長) */}
+            {(() => {
+              const h = horizons.longTerm;
+              const isBull = h.bias === 'BULLISH';
+              const isBear = h.bias === 'BEARISH';
+              return (
+                <div
+                  className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all ${
+                    isBull
+                      ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/80 dark:border-rose-900/40'
+                      : isBear
+                        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40'
+                        : 'bg-white dark:bg-[#1F2631] border-[#EAEDF2] dark:border-[#262C36]'
+                  }`}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-[#191F28] dark:text-white">
+                        <Shield className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span>長期評估</span>
+                      </div>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          isBull
+                            ? 'bg-rose-100 text-[#F04452] dark:bg-rose-950/80'
+                            : isBear
+                              ? 'bg-emerald-100 text-[#059669] dark:bg-emerald-950/80'
+                              : 'bg-gray-100 text-[#4E5968] dark:bg-gray-800 dark:text-gray-300'
+                        }`}
+                      >
+                        {h.biasLabel} · {h.score}分
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-[#8B95A1] font-mono">
+                      週期：{h.timeframe}
+                    </div>
+
+                    <div className="text-[11px] font-medium text-[#191F28] dark:text-white leading-snug">
+                      {h.summary}
+                    </div>
+
+                    <div className="space-y-1 pt-1 border-t border-black/5 dark:border-white/5 text-[10px] text-[#4E5968] dark:text-[#9BA4B0]">
+                      {h.keyFactors.map((f, i) => (
+                        <div key={i} className="flex items-center gap-1 line-clamp-1">
+                          <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
+                          <span>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-1 text-[10px]">
+                    <div className="text-[#8B95A1] font-mono">
+                      長期底氣：<span className="font-bold text-[#191F28] dark:text-white">{h.focusLevel}</span>
+                    </div>
+                    <div className="text-indigo-800 dark:text-indigo-300 font-medium">
+                      🎯 指引：{h.strategyGuide}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* 1.5 Google Gemini 3.5 旗艦大語言模型深度思考觀點 */}
       <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-blue-50/40 to-purple-50/50 dark:from-[#171D28] dark:via-[#161D2B] dark:to-[#1C1A29] border border-indigo-200/80 dark:border-indigo-900/40 space-y-3">

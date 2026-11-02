@@ -54,6 +54,7 @@ function freeQuoteApiDevPlugin(): Plugin {
           }
 
           // 2. 分流台股代碼與其他海外/指數代碼
+          const fugleApiKey = urlObj.searchParams.get('fugleApiKey') || process.env.FUGLE_API_KEY || '';
           const twCodesToFetch = new Set<string>();
           const foreignSymbols: string[] = [];
           for (const rawSym of requestedSymbols) {
@@ -65,14 +66,76 @@ function freeQuoteApiDevPlugin(): Plugin {
             }
           }
 
-          // 3. 查詢 TWSE MIS 官方盤中即時報價
           const quotes: Record<string, unknown> = {};
           const twCodesArray = Array.from(twCodesToFetch);
-          if (twCodesArray.length > 0) {
+
+          // 2.5 若有富果金鑰，優先查詢富果官方開放行情
+          if (fugleApiKey && twCodesArray.length > 0) {
+            await Promise.all(
+              twCodesArray.map(async (code) => {
+                try {
+                  const fRes = await fetch(
+                    `https://api.fugle.tw/market/v1.0/stock/intraday/quote/${encodeURIComponent(code)}`,
+                    {
+                      headers: { 'X-API-KEY': fugleApiKey },
+                    }
+                  );
+                  if (!fRes.ok) return;
+                  const fData = (await fRes.json()) as {
+                    symbol?: string;
+                    name?: string;
+                    closePrice?: number;
+                    previousClose?: number;
+                    changePercent?: number;
+                    openPrice?: number;
+                    highPrice?: number;
+                    lowPrice?: number;
+                    total?: { unit?: number };
+                    updatedAt?: string;
+                  };
+                  if (fData && typeof fData.closePrice === 'number' && fData.closePrice > 0) {
+                    const price = fData.closePrice;
+                    const prevClose = fData.previousClose;
+                    const dailyChangePct =
+                      typeof fData.changePercent === 'number'
+                        ? fData.changePercent
+                        : prevClose && prevClose > 0
+                          ? Math.round(((price - prevClose) / prevClose) * 10000) / 100
+                          : undefined;
+
+                    const entry = {
+                      symbol: code,
+                      resolvedSymbol: `${code}.TW`,
+                      name: fData.name || code,
+                      price: Math.round(price * 100) / 100,
+                      previousClose: prevClose !== undefined ? Math.round(prevClose * 100) / 100 : undefined,
+                      dailyChangePct,
+                      open: fData.openPrice !== undefined ? Math.round(fData.openPrice * 100) / 100 : undefined,
+                      high: fData.highPrice !== undefined ? Math.round(fData.highPrice * 100) / 100 : undefined,
+                      low: fData.lowPrice !== undefined ? Math.round(fData.lowPrice * 100) / 100 : undefined,
+                      volumeLots: fData.total?.unit,
+                      currency: 'TWD',
+                      source: 'twse',
+                      updatedAt: fData.updatedAt || new Date().toISOString(),
+                    };
+                    quotes[code] = entry;
+                    quotes[`${code}.TW`] = entry;
+                    quotes[`${code}.TWO`] = entry;
+                  }
+                } catch {
+                  // fallback
+                }
+              })
+            );
+          }
+
+          // 3. 查詢 TWSE MIS 官方盤中即時報價 (針對尚未被富果命中的台股代碼)
+          const remainingTwCodes = twCodesArray.filter((code) => !quotes[code]);
+          if (remainingTwCodes.length > 0) {
             const chunkSize = 30;
             const chunks: string[][] = [];
-            for (let i = 0; i < twCodesArray.length; i += chunkSize) {
-              chunks.push(twCodesArray.slice(i, i + chunkSize));
+            for (let i = 0; i < remainingTwCodes.length; i += chunkSize) {
+              chunks.push(remainingTwCodes.slice(i, i + chunkSize));
             }
 
             await Promise.all(

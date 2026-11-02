@@ -506,6 +506,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
             </div>
 
+            {/* 富果 Fugle 官方開放行情 API 設定 (選填) */}
+            <div className="p-3 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-[#191F28] dark:text-[#F2F4F8] text-xs flex items-center gap-1.5">
+                    <span>富果 Fugle 官方即時盤中行情專線</span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-blue-100 text-[#2563EB] dark:bg-blue-950/60 dark:text-blue-300">
+                      即時專線
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#8B95A1]">
+                    支援全台股即時盤中撮合價、五檔與量能；未填寫則自動走證交所 TWSE MIS + Yahoo 免費雙軌
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-[#2563EB]">
+                  {settings.fugleApiKey ? '已啟用富果專線' : '走官方雙軌'}
+                </span>
+              </div>
+
+              <div>
+                <input
+                  type="password"
+                  value={settings.fugleApiKey || ''}
+                  onChange={(e) => updateSettings({ fugleApiKey: e.target.value })}
+                  placeholder="輸入富果 Fugle API Key (選填，享有官方穩定專線)"
+                  className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-[#F6F7F9] dark:bg-[#1F2631] text-xs font-mono text-[#191F28] dark:text-[#F2F4F8]"
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-[#8B95A1]">
+                <span>免費申請富果會員即可取得開放行情 API Key</span>
+                <a
+                  href="https://developer.fugle.tw/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#2563EB] hover:underline"
+                >
+                  前往 Fugle 富果開發者中心申請 ↗
+                </a>
+              </div>
+            </div>
+
             {/* Google Gemini AI 大語言模型設定 */}
             <div className="p-3 rounded-xl bg-white dark:bg-[#161B22] border border-[#EAEDF2] dark:border-[#262C36] space-y-2">
               <div className="flex items-center justify-between">

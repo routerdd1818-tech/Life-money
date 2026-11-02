@@ -373,6 +373,7 @@ export interface VaultSettings {
   lastQuoteRefreshedAt?: string;        // 最新行情與匯率更新時間戳記
   finMindToken?: string;                // FinMind 官方金融 API Token (選填，填入可解鎖每小時 600 次額度)
   geminiApiKey?: string;                // Google Gemini 大語言模型 API 金鑰 (支援 Gemini 3.5 深度操盤手分析)
+  fugleApiKey?: string;                 // 富果 Fugle 開放行情 API 金鑰 (選填，填入解鎖專屬即時行情專線)
 }
 
 // ==========================================

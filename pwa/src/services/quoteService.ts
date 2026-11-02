@@ -270,17 +270,34 @@ export interface ApiQuotesResponse {
   fetchedAt: string;
 }
 
+function getStoredFugleApiKey(): string {
+  try {
+    const raw = localStorage.getItem('financelife_settings_v1');
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    return parsed?.fugleApiKey || '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * 查詢任一單檔股票（台股上市/上櫃/興櫃、美股、ETF、基金）即時盤中報價
  */
-export async function fetchRealtimeQuote(rawSymbol: string): Promise<LiveQuoteItem | null> {
+export async function fetchRealtimeQuote(
+  rawSymbol: string,
+  fugleApiKey?: string
+): Promise<LiveQuoteItem | null> {
   const clean = rawSymbol.trim().toUpperCase();
   if (!clean) return null;
 
+  const effectiveKey = fugleApiKey || getStoredFugleApiKey();
+  const fugleParam = effectiveKey ? `&fugleApiKey=${encodeURIComponent(effectiveKey)}` : '';
+
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(clean)}`, {
+    const timer = setTimeout(() => controller.abort(), 4500);
+    const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(clean)}${fugleParam}`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -308,15 +325,19 @@ export async function fetchRealtimeQuote(rawSymbol: string): Promise<LiveQuoteIt
  * 批次查詢多檔股票即時盤中報價
  */
 export async function fetchBatchRealtimeQuotes(
-  symbols: string[]
+  symbols: string[],
+  fugleApiKey?: string
 ): Promise<Record<string, LiveQuoteItem>> {
   const cleanSymbols = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()))).filter(Boolean);
   if (cleanSymbols.length === 0) return {};
 
+  const effectiveKey = fugleApiKey || getStoredFugleApiKey();
+  const fugleParam = effectiveKey ? `&fugleApiKey=${encodeURIComponent(effectiveKey)}` : '';
+
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(cleanSymbols.join(','))}`, {
+    const timer = setTimeout(() => controller.abort(), 6500);
+    const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(cleanSymbols.join(','))}${fugleParam}`, {
       signal: controller.signal,
     });
     clearTimeout(timer);

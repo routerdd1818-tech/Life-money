@@ -1,11 +1,12 @@
 /**
  * 100% 免費、免金鑰 (Zero-Key) 全球與全台股即時多源金融報價 API
- * 雙軌即時引擎：
- * 1. 台灣證券交易所 TWSE & 櫃買中心 TPEx 官方即時盤中 MIS API (mis.twse.com.tw)
+ * 三重即時引擎：
+ * 1. 富果 Fugle 官方開放行情 API (若有提供金鑰優先啟用官方專線)
+ * 2. 台灣證券交易所 TWSE & 櫃買中心 TPEx 官方即時盤中 MIS API (mis.twse.com.tw)
  *    - 涵蓋上市、上櫃、興櫃、ETF、債券 ETF，秒級盤中撮合成交價、昨收價、即時漲跌、高低價與成交量
- * 2. Yahoo Finance v8 Open API (query1/query2.finance.yahoo.com)
+ * 3. Yahoo Finance v8 Open API (query1/query2.finance.yahoo.com)
  *    - 涵蓋美股、ADR、全球指數、海外 ETF、境內外基金與備援
- * 3. open.er-api.com 即時匯率 (USD -> TWD 等 6 大貨幣)
+ * 4. open.er-api.com 即時匯率 (USD -> TWD 等 6 大貨幣)
  */
 
 interface QuoteItemResult {
@@ -109,13 +110,83 @@ async function fetchAllExchangeRates(): Promise<ExchangeRatesTable> {
 }
 
 /**
+ * 查詢富果 Fugle 官方開放行情 API (若有提供 API Key)
+ */
+async function fetchFugleBatch(stockCodes: string[], apiKey: string): Promise<Record<string, QuoteItemResult>> {
+  if (!apiKey || stockCodes.length === 0) return {};
+  const results: Record<string, QuoteItemResult> = {};
+
+  await Promise.all(
+    stockCodes.map(async (code) => {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`https://api.fugle.tw/market/v1.0/stock/intraday/quote/${encodeURIComponent(code)}`, {
+          signal: controller.signal,
+          headers: { 'X-API-KEY': apiKey },
+        });
+        clearTimeout(timer);
+
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          symbol?: string;
+          name?: string;
+          closePrice?: number;
+          previousClose?: number;
+          changePercent?: number;
+          openPrice?: number;
+          highPrice?: number;
+          lowPrice?: number;
+          total?: { unit?: number };
+          updatedAt?: string;
+        };
+
+        if (data && typeof data.closePrice === 'number' && data.closePrice > 0) {
+          const price = data.closePrice;
+          const prevClose = data.previousClose;
+          const dailyChangePct =
+            typeof data.changePercent === 'number'
+              ? data.changePercent
+              : prevClose && prevClose > 0
+                ? Math.round(((price - prevClose) / prevClose) * 10000) / 100
+                : undefined;
+
+          const entry: QuoteItemResult = {
+            symbol: code,
+            resolvedSymbol: `${code}.TW`,
+            name: data.name || code,
+            price: Math.round(price * 100) / 100,
+            previousClose: prevClose !== undefined ? Math.round(prevClose * 100) / 100 : undefined,
+            dailyChangePct,
+            open: data.openPrice !== undefined ? Math.round(data.openPrice * 100) / 100 : undefined,
+            high: data.highPrice !== undefined ? Math.round(data.highPrice * 100) / 100 : undefined,
+            low: data.lowPrice !== undefined ? Math.round(data.lowPrice * 100) / 100 : undefined,
+            volumeLots: data.total?.unit,
+            currency: 'TWD',
+            source: 'twse',
+            updatedAt: data.updatedAt || new Date().toISOString(),
+          };
+
+          results[code] = entry;
+          results[`${code}.TW`] = { ...entry, symbol: `${code}.TW` };
+          results[`${code}.TWO`] = { ...entry, symbol: `${code}.TWO` };
+        }
+      } catch {
+        // fallback
+      }
+    })
+  );
+
+  return results;
+}
+
+/**
  * 批次向 TWSE MIS 官方端點查詢台股即時盤中報價
  */
 async function fetchTwseMisBatch(stockCodes: string[]): Promise<Record<string, QuoteItemResult>> {
   if (stockCodes.length === 0) return {};
   const results: Record<string, QuoteItemResult> = {};
 
-  // 每批最多 30 檔股票，避免 URL 過長
   const chunkSize = 30;
   const chunks: string[][] = [];
   for (let i = 0; i < stockCodes.length; i += chunkSize) {
@@ -124,7 +195,6 @@ async function fetchTwseMisBatch(stockCodes: string[]): Promise<Record<string, Q
 
   await Promise.all(
     chunks.map(async (chunk) => {
-      // 為每檔股票同時查詢 tse 與 otc，確保上市與上櫃皆精確命中
       const exChList: string[] = [];
       for (const code of chunk) {
         exChList.push(`tse_${code}.tw`, `otc_${code}.tw`);
@@ -153,7 +223,6 @@ async function fetchTwseMisBatch(stockCodes: string[]): Promise<Record<string, Q
           const code = item.c?.trim().toUpperCase();
           if (!code) continue;
 
-          // 解析價格順序：撮合成交價 z -> trade.z -> 最佳買賣均價 -> 開盤價 o -> 昨收價 y
           let price: number | null = null;
           if (item.z && item.z !== '-') {
             const parsed = parseFloat(item.z);
@@ -201,7 +270,6 @@ async function fetchTwseMisBatch(stockCodes: string[]): Promise<Record<string, Q
           const resolvedSymbol = `${code}.${isOtc ? 'TWO' : 'TW'}`;
           const name = item.n || item.nf || code;
 
-          // 產生 ISO 更新時間
           let updatedAt = new Date().toISOString();
           if (item.d && item.t) {
             const y = item.d.slice(0, 4);
@@ -226,13 +294,12 @@ async function fetchTwseMisBatch(stockCodes: string[]): Promise<Record<string, Q
             updatedAt,
           };
 
-          // 同時註冊 short code、.TW 與 .TWO 索引鍵
           results[code] = entry;
           results[`${code}.TW`] = { ...entry, symbol: `${code}.TW` };
           results[`${code}.TWO`] = { ...entry, symbol: `${code}.TWO` };
         }
       } catch {
-        // fallback to Yahoo
+        // fallback
       }
     })
   );
@@ -348,7 +415,6 @@ function getCandidateYahooSymbols(rawSymbol: string): string[] {
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike): Promise<void> {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  // 零快取：確保盤中各標的皆能即時取得最新撮合價
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -365,6 +431,11 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const fugleApiKey =
+    (typeof req.query?.fugleApiKey === 'string' && req.query.fugleApiKey.trim()) ||
+    process.env.FUGLE_API_KEY ||
+    '';
+
   // 1. 分流台股代碼與其他海外/指數代碼
   const twCodesToFetch = new Set<string>();
   const foreignSymbols: string[] = [];
@@ -378,15 +449,23 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     }
   }
 
-  // 2. 平行發動：外匯匯率 + TWSE/TPEx 官方 MIS 批次 + 海外標的 Yahoo
+  // 2. 若提供富果金鑰，優先查詢富果官方行情
+  let fugleMap: Record<string, QuoteItemResult> = {};
+  if (fugleApiKey && twCodesToFetch.size > 0) {
+    fugleMap = await fetchFugleBatch(Array.from(twCodesToFetch), fugleApiKey);
+  }
+
+  // 3. 尚未被富果命中的台股代碼，交由 TWSE MIS 官方介面查詢
+  const twCodesForMis = Array.from(twCodesToFetch).filter((code) => !fugleMap[code]);
+
   const [exchangeRates, twseMisMap] = await Promise.all([
     fetchAllExchangeRates(),
-    fetchTwseMisBatch(Array.from(twCodesToFetch)),
+    fetchTwseMisBatch(twCodesForMis),
   ]);
 
-  const quotes: Record<string, QuoteItemResult> = { ...twseMisMap };
+  const quotes: Record<string, QuoteItemResult> = { ...fugleMap, ...twseMisMap };
 
-  // 3. 檢查哪些請求尚未被 TWSE MIS 命中 (如美股、ETF、或 MIS 未收錄之代碼)，由 Yahoo Finance 接手補足
+  // 4. 檢查哪些請求尚未被命中 (美股、全球 ETF、或未收錄標的)，由 Yahoo Finance 接手補足
   const unresolvedSymbols: string[] = [];
   for (const rawSym of requestedSymbols) {
     const upper = rawSym.toUpperCase();
